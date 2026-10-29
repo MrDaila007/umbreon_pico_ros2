@@ -11,8 +11,10 @@ must see. Record results in the `Result:` lines. Stop and report at the first st
 - **Start low.** First movement is `raw 0 0.3`. Do not go above 0.5 on this bench. Reverse is capped by
   firmware at 0.38.
 - **Emergency stop, in order of speed:** cut ESC power; unplug the battery; type `stop` (neutral now) or
-  `disarm` (neutral and clears both keys). Unplugging the console cable does **NOT** stop a command that is
-  already running: it keeps going until its `[ms]` ends (3 s at most, see step 7).
+  `disarm` (neutral and clears both keys). Unplugging the USB console cable, closing the USB port, or
+  killing the helper stops a running USB command within about 0.3 s (the firmware drops the repeat when the
+  USB host disconnects; the 250 ms timeout does the rest, see step 7). A command typed on the **UART**
+  console (GP16/GP17) still runs until its `[ms]` ends (3 s at most), whatever happens to the cable.
 - A driving command lasts at most 3 s (`[ms]` defaults to 1000, max 3000) and then the car goes neutral
   by itself (command timeout 250 ms after the last refresh).
 - Keep the steering servo away from your fingers. Do not run any step that is not on this list.
@@ -109,17 +111,25 @@ Result:
 ## 7. Command loss: the car must stop by itself
 
 Console repetition: the firmware repeats a `raw/speed/auto` line every 20 ms for its `[ms]` (max 3 s) on
-its own, so unplugging the cable mid-run does not cut a running command short. What protects you is
-the command timeout (250 ms) once the repeat ends. Test the PC-dying case with the helper, which keeps
-refreshing a short command and then goes silent:
+its own. A line typed on the USB console stops repeating as soon as the USB host disconnects (cable
+unplugged, port closed, helper killed: the host drops DTR); no neutral is posted, so the command timeout
+(250 ms) stops the car and motion then needs a fresh neutral. A UART-origin line repeats to its `[ms]`.
+Test the PC-dying case with the helper, which keeps refreshing a short command and then goes silent:
 
 - [ ] Close the terminal program (the port must be free). Arm and neutral first (step 3), then:
   `python3 tools/console_drive.py --send "arm car" --send "arm ros" --send "raw 0 0" --send "raw 0 0.3" --stop-after 1 --status`
   Expected: wheels turn for about 1 s, then stop within about 0.3 s of the script going silent (60 ms repeat
   tail + 250 ms timeout). The `status` printed afterwards shows `esc 1500 us` and `stop: cmd_timeout`.
-- [ ] Physical unplug: `raw 0 0.3 3000`, pull the console cable at once. Expected: the car keeps going
-  only until the 3 s of `[ms]` run out, then stops. If the Pico loses power with the cable, the wheels stop
-  immediately. Record what happened.
+- [ ] Helper closes the port mid-run: arm and neutral first, then
+  `python3 tools/console_drive.py --send "raw 0 0.3 3000" --no-final-stop`
+  (the script sends the line, waits about 0.3 s and exits; closing the port drops DTR; `--no-final-stop`
+  makes sure no `stop` is sent). Expected: the wheels stop within about 0.3 s of the script exiting, well
+  before the 3 s of `[ms]`. Repeat with a terminal: `raw 0 0.3 3000`, then quit picocom/screen at once;
+  same expectation. `status` afterwards shows `esc 1500 us`, `stop: cmd_timeout`; the next movement needs a
+  fresh neutral (`raw 0 0`) first.
+- [ ] Physical unplug: `raw 0 0.3 3000`, pull the USB console cable at once. Expected: the car stops within
+  about 0.3 s of the unplug. If the Pico is powered from USB it simply loses power with the cable and the
+  wheels stop immediately (see step 8 for what the ESC does with no pulses). Record what happened.
 
 Result:
 
@@ -127,8 +137,19 @@ Result:
 
 Purpose: see what the ESC does when the Pico stops sending pulses (the Pico's own outputs go away).
 
-- [ ] Arm, neutral, then `raw 0 0.3 3000`. While the wheels are turning, hold BOOTSEL and tap the reset
-  button (or replug with BOOTSEL held). The Pico is now in the bootloader and sends no PWM.
+The Pico 2 W has no reset button. Two ways to put it in BOOTSEL (no PWM) while the motor is turning:
+
+- **picotool** (preferred, USB cable plugged in): keep picocom/screen **open** on `/dev/ttyACM0` (closing
+  it would stop the command, see step 7) and type the drive line there; then, from a second shell, run
+  `picotool reboot -u -f`. This forces BOOTSEL through the USB reset interface (it does not need the
+  serial port); PWM stops at once.
+- **Power cycle**: hold BOOTSEL and cycle VSYS (the Pico's own supply) while the motor is turning.
+
+BEC caveat: if the Pico is powered from the ESC's BEC, unplugging USB does **not** reset it; use picotool
+or cycle the BEC/VSYS supply with BOOTSEL held.
+
+- [ ] Arm, neutral, then `raw 0 0.3 3000` and, while the wheels are turning, put the Pico in BOOTSEL by one
+  of the two ways above. The Pico is now in the bootloader and sends no PWM.
   Expected: the ESC stops the motor and stays stopped (failsafe on signal loss). **If the wheels keep
   turning, cut ESC power at once** and report it.
   Record the ESC model and the result: ____________________
