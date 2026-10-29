@@ -77,7 +77,8 @@ target_compile_definitions(umbreon_pico_ros2 PRIVATE
     PICO_DEFAULT_UART=0
     PICO_DEFAULT_UART_TX_PIN=16
     PICO_DEFAULT_UART_RX_PIN=17
-    PICO_DEFAULT_UART_BAUD_RATE=115200)
+    PICO_DEFAULT_UART_BAUD_RATE=115200
+    PICO_STDIO_USB_STDOUT_TIMEOUT_US=30000)  # a stalled terminal must not block core 0 for 500 ms (UMB_STOP_CORE0)
 target_link_libraries(umbreon_pico_ros2
     pico_stdlib
     pico_flash
