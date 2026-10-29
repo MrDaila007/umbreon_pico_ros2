@@ -511,23 +511,23 @@ subscriptions/service and the production clock is Task 9.
 
 **Files:** umb_telemetry, umb_odometry, sensor snapshot extensions and tests.
 
-- [ ] Pin/document Range profile metadata from ST evidence (8190 is a sentinel
+- [x] Pin/document Range profile metadata from ST evidence (8190 is a sentinel
   boundary, not a sensor-range claim), and any bench limits still to be measured.
   ST does not give a universal minimum independent of optics/cover glass: record
   a conservative application minimum as a chosen limit, not a datasheet guarantee.
-- [ ] Conversion tests: Range finite/9999/stale/offline/fresh OOR/below-min/above-max; Imu SI units and
+- [x] Conversion tests: Range finite/9999/stale/offline/fresh OOR/below-min/above-max; Imu SI units and
   unsupported orientation; invalid/nonfinite inputs never create healthy samples;
   battery unknown fields; fixed bounded frame names and per-sensor stamps.
-- [ ] Timestamp tests: epoch offset, unsynced suppression, acquisition vs publish
+- [x] Timestamp tests: epoch offset, unsynced suppression, acquisition vs publish
   time, uint32 wrap, future-sample tolerance, failed resync and backwards epoch
   adjustment with monotonic safety/odometry unaffected.
-- [ ] Odometry tests: forward/reverse straight motion, turn arc, heading crossing
+- [x] Odometry tests: forward/reverse straight motion, turn arc, heading crossing
   +/-180/360, normalization, IMU failure/recovery, long dt ignored, restart pose
   reset and reconnect pose retention. Use measured signed speed, not target.
-- [ ] Cadence tests: IMU100/odom50/range25/battery1/diagnostics1; long scheduler gap
+- [x] Cadence tests: IMU100/odom50/range25/battery1/diagnostics1; long scheduler gap
   emits current data once, never a catch-up flood. Snapshot acquisition generation
   prevents repeated raw samples being labelled as newly acquired.
-- [ ] Host tests/coverage; commit `feat: SI telemetry and monotonic odometry`.
+- [x] Host tests/coverage; commit `feat: SI telemetry and monotonic odometry`.
 
 ## Task 9: ROS entities, messages and recoverable lifecycle
 
