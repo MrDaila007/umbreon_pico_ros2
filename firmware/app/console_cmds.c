@@ -178,6 +178,7 @@ static void print_help(void) {
            "  reboot\n"
            "set/defaults/wifi/agent/save require disarmed and idle;\n"
            "save is also refused while armed; mode is always allowed (it disarms)\n"
+           "ap_pass: 8..63 chars, cannot be cleared; defaults keeps it\n"
            "[ms] defaults to 1000, max 3000\n");
 }
 
@@ -262,11 +263,12 @@ static void restore_defaults(void) {
     if (driving()) { printf("refused: driving\n"); return; }
     umb_settings_t current;
     uint32_t revision = shared_settings_snapshot(&current);
-    umb_settings_t d = umb_settings_defaults();
+    /* The device AP password is an identity, not a tunable: keep it. */
+    umb_settings_t d = umb_settings_defaults_keeping_ap_pass(&current);
     if (!shared_commit_settings(&d, revision, false)) {
         printf("refused: armed or busy\n"); return;
     }
-    printf("ok: defaults loaded (not saved; run save)\n");
+    printf("ok: defaults loaded, ap_pass kept (not saved; run save)\n");
 }
 
 static void save_settings(void) {

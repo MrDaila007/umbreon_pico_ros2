@@ -22,6 +22,7 @@ _Static_assert(UMB_SETTINGS_SLOT_SIZE == FLASH_SECTOR_SIZE, "one slot per flash 
 static int s_slot = -1;        /* newest valid slot, -1 = defaults */
 static uint32_t s_seq;
 static uint32_t s_last_write_ms;
+static umb_settings_t s_persisted;
 static uint8_t s_buf[UMB_SETTINGS_SLOT_SIZE] __attribute__((aligned(4)));
 
 typedef struct {
@@ -41,6 +42,7 @@ bool hal_settings_load(umb_settings_t *out) {
     uint32_t seq = 0;
     s_slot = umb_settings_pick_slot(slot_ptr(0), slot_ptr(1), UMB_SETTINGS_SLOT_SIZE, out, &seq);
     s_seq = seq;
+    s_persisted = *out;
     return s_slot >= 0;
 }
 
@@ -84,6 +86,7 @@ bool hal_settings_save(const umb_settings_t *s) {
     }
     s_slot = target;
     s_seq = seq;
+    s_persisted = check;
     return true;
 }
 
@@ -97,4 +100,10 @@ uint32_t hal_settings_seq(void) {
 
 uint32_t hal_settings_last_write_ms(void) {
     return s_last_write_ms;
+}
+
+bool hal_settings_persisted(umb_settings_t *out) {
+    if (!out) return false;
+    *out = s_persisted;
+    return true;
 }

@@ -60,6 +60,9 @@ typedef struct {
 #endif
 
 umb_settings_t umb_settings_defaults(void);
+/* Defaults for every field except the device AP password (a per-device identity,
+ * provisioned once): console `defaults` must not trigger a new password. */
+umb_settings_t umb_settings_defaults_keeping_ap_pass(const umb_settings_t *current);
 /* Clamp to ranges; non-finite floats become the default. */
 umb_settings_t umb_settings_sanitize(umb_settings_t s);
 /* Field-wise comparison (ignores struct padding). */

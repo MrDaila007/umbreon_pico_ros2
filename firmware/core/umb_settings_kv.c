@@ -22,6 +22,9 @@ typedef struct {
 #define FN(name, kd, lo, hi) F(#name, kd, name, lo, hi)
 #define FSTR(name, secret_) { #name, K_STR, offsetof(umb_settings_t, name), \
                               sizeof(((umb_settings_t *)0)->name), 0, 0, secret_ }
+/* String with an enforced length range on set (max > 0). */
+#define FSTRL(name, secret_, lo, hi) { #name, K_STR, offsetof(umb_settings_t, name), \
+                              sizeof(((umb_settings_t *)0)->name), lo, hi, secret_ }
 #define FRX(id, idname, mode) { "reflex." idname "." #mode, K_RX, \
         (uint16_t)(offsetof(umb_settings_t, reflex_##mode) + (id)), 0, 0, 3, false }
 #define FRX2(id, idname) FRX(id, idname, manual), FRX(id, idname, auto)
@@ -44,7 +47,7 @@ static const field_t FIELDS[] = {
     FN(bat_enabled, K_BOOL, 0, 1), FN(bat_multiplier, K_F32, 0.1, 20), FN(bat_low, K_F32, 0.1, 20),
     FN(imu_rotate, K_BOOL, 0, 1),
     FN(wifi_mode, K_WIFI, 0, 2),
-    FSTR(wifi_ssid, false), FSTR(wifi_pass, true), FSTR(ap_pass, true),
+    FSTR(wifi_ssid, false), FSTR(wifi_pass, true), FSTRL(ap_pass, true, 8, 63), /* WPA2; cannot be cleared */
     FN(agent_ip, K_IP, 0, 0), FN(agent_port, K_U16, 1, 65535),
     FN(sta_timeout_s, K_U16, 5, 120), FN(ros_domain_id, K_U8, 0, 232),
     FN(calibrated, K_BOOL, 0, 1),
@@ -269,6 +272,7 @@ static bool store_value(umb_settings_t *s, const field_t *f, const char *value)
     if (f->kind == K_STR) {
         size_t len = strlen(value);
         if (len >= f->size) return false;
+        if (f->max > 0 && (len < (size_t)f->min || len > (size_t)f->max)) return false;
         memset(base + f->off, 0, f->size);
         memcpy(base + f->off, value, len);
         return true;

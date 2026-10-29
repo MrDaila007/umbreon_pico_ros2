@@ -146,9 +146,24 @@ TEST(test_get_kv_masks_password) {
     ASSERT_TRUE(umb_settings_set_kv(&d, "wifi_pass", "hunter2", &o));
     ASSERT_TRUE(umb_settings_get_kv(&o, "wifi_pass", buf, sizeof buf));
     ASSERT_TRUE(strcmp(buf, "***") == 0);
-    ASSERT_TRUE(umb_settings_set_kv(&d, "ap_pass", "hunter2", &o));
+    ASSERT_TRUE(umb_settings_set_kv(&d, "ap_pass", "hunter22", &o));
     ASSERT_TRUE(umb_settings_get_kv(&o, "ap_pass", buf, sizeof buf));
     ASSERT_TRUE(strcmp(buf, "***") == 0);
+}
+
+TEST(test_ap_pass_must_be_wpa2_length_and_survives_defaults) {
+    umb_settings_t d = umb_settings_defaults(), o;
+    ASSERT_TRUE(umb_settings_set_kv(&d, "ap_pass", "synthetic-ap", &o));
+    umb_settings_t before = o;
+    ASSERT_FALSE(umb_settings_set_kv(&before, "ap_pass", "", &o));       /* cannot clear */
+    ASSERT_FALSE(umb_settings_set_kv(&before, "ap_pass", "short77", &o)); /* < 8 */
+    char long_pass[65]; memset(long_pass, 'A', 64); long_pass[64] = 0;
+    ASSERT_FALSE(umb_settings_set_kv(&before, "ap_pass", long_pass, &o)); /* > 63 */
+    ASSERT_TRUE(umb_settings_set_kv(&before, "wifi_pass", "", &o));      /* open STA still ok */
+    before.agent_port = 9999;
+    umb_settings_t reset = umb_settings_defaults_keeping_ap_pass(&before);
+    ASSERT_TRUE(strcmp(reset.ap_pass, "synthetic-ap") == 0);
+    ASSERT_EQ(reset.agent_port, umb_settings_defaults().agent_port);
 }
 
 TEST(test_reflex_defaults) {
@@ -323,6 +338,7 @@ int main(void) {
     RUN_TEST(test_set_kv_types);
     RUN_TEST(test_get_kv);
     RUN_TEST(test_get_kv_masks_password);
+    RUN_TEST(test_ap_pass_must_be_wpa2_length_and_survives_defaults);
     RUN_TEST(test_reflex_defaults);
     RUN_TEST(test_set_kv_reflex_action);
     RUN_TEST(test_sanitize_idempotent_on_defaults);

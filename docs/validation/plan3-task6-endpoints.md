@@ -18,6 +18,13 @@ the only core-0 heartbeat writer and beats before and after each iteration.
    latched), closes the probe socket, and only then stops both radios and
    restarts the FSM. If the close fails, the change waits and is retried.
 2. Provisions a missing AP password only when the FSM is about to start the AP.
+   An iteration that attempts provisioning ends there. The AP start runs on
+   the next iteration, after a heartbeat: at most one blocking operation per
+   iteration.
+   Radio starts and stops (measured at 243–288 ms) and radio-init retries are
+   deferred while the car is armed. Loss is still latched at once and disarms
+   the car, so the wait is about one control tick. Owner WiFi edits likewise
+   wait for disarm.
 3. Steps `net_wifi`: async STA join, AUTO fallback to AP, 60 s STA retry from AP
    when no session is up, bounded backoff. Loss → `shared_set_link(false,false)`
    runs before any teardown or radio I/O. Link loss bumps the session
@@ -25,6 +32,7 @@ the only core-0 heartbeat writer and beats before and after each iteration.
 4. Runs endpoint selection with one ≤100 ms XRCE probe at most per iteration.
    After a failed round (one STA probe, or one probe per DHCP lease in AP mode),
    it waits 1 s and leaves the device offline. It never loops on discovery.
+   An iteration that applies a radio start/stop does no probe.
    A probe socket that fails to close is retried before any further probe and
    blocks radio changes.
 5. Publishes `shared_network_t` (no credentials, no STA SSID). The console
@@ -47,10 +55,17 @@ kept the radio in AP retries forever.
   entropy. The 32-symbol alphabet `23456789ABCDEFGHJKLMNPQRSTUVWXYZ` leaves out
   0/O/1/I/l/o. Entropy comes from `hal_rand_fill16` (`pico_rand`, `get_rand_128`).
 - `settings_provision_ap_pass` reserves maintenance and waits for control's
-  neutral ACK. It then persists the complete current settings plus the password
-  and verifies them. Only after that does it publish the password to shared
-  settings, through `shared_provision_ap_pass`, which is scoped to the
-  reservation. It never overwrites an existing `ap_pass`.
+  neutral ACK. It then writes the copy flash already holds
+  (`hal_settings_persisted`: the loaded blob or the boot defaults, refreshed
+  after each verified save) plus the new password. It **never writes unsaved
+  RAM edits**. After verification it publishes only the password to RAM.
+  - If flash already has an `ap_pass`, it does not write: it returns
+    `ALREADY_SET` and restores RAM if RAM lost the password.
+  - When the policy stage is `DONE`, the owner only runs the restore-only
+    `settings_restore_ap_pass`. It never generates a new password.
+- `ap_pass` is a per-device identity. `set ap_pass` requires 8..63 characters,
+  so it cannot be cleared; the console parser also refuses an empty value.
+  Console `defaults` keeps it (`umb_settings_defaults_keeping_ap_pass`).
 - `umb_ap_provision` (pure) bounds the retries. When the car is armed or there
   is no neutral ACK, it retries after 1 s and nothing is written. Missing
   entropy or a flash failure backs off 10 → 20 → 40 → 60 s. After 3 flash write
@@ -71,7 +86,7 @@ This replaces the earlier requirement to bound the write inside 250 ms
 
 ## Host evidence
 
-- `test_net_owner` (9 fake-time end-to-end tests, real owner + bridges +
+- `test_net_owner` (12 fake-time end-to-end tests, real owner + bridges +
   coordinator + shared state). Covers: offline radio; async STA join with the
   configured IP; STA broadcast rounds bounded to about 1/s; STA timeout → AP
   with phone first (no XRCE reply) and PC second (selected); the STA fixed IP
@@ -84,10 +99,14 @@ This replaces the earlier requirement to bound the write inside 250 ms
   failed to close; STA link loss latched before rejoin.
 - `test_ap_provision` (4), `test_network_identity` (+1), `test_settings_apply`
   (+3), `test_net_fsm` (+1).
-- Full suite: 400 C tests in 36 executables plus 10 Python, all pass. Core and
-  driver coverage is 99.4% (1715/1725). App coverage: net_owner 96% (the
-  uncovered lines are the provisioning-race `ALREADY_SET` branch), net_wifi,
-  net_endpoint and settings_apply 100%. ASan/UBSan pass for endpoint,
+- Fix round 1 adds three owner tests. `defaults` followed by an AP start does
+  no write and keeps the password. RAM losing the password restores it with no
+  write, including on a fresh boot. An unsaved edit is never flashed. Radio
+  starts are deferred while armed. Radio starts are now counted as blocking
+  operations: the max is one per iteration.
+- Full suite: 405 C tests in 36 executables plus 10 Python, all pass. Core and
+  driver coverage is 99.4% (1721/1731). App coverage: net_owner 100%, net_wifi
+  and net_endpoint 100%, settings_apply 98%. ASan/UBSan pass for endpoint,
   ros_command, network_identity and ap_provision. Logs are ignored
   `build/plan3-task6-{fw,coverage,sanitizers}.log`.
 
@@ -115,10 +134,20 @@ This replaces the earlier requirement to bound the write inside 250 ms
   part; the 2000 ms window does not depend on it.
 - `get ap_pass` still prints `***`.
 
+### Fix round 1 (2026-10-30)
+
+- I used a temporary measurement image, not committed. It forced AP-only with
+  a synthetic password held in RAM only, so nothing was written to flash.
+  `DBG slow iter 288 ms actions 4` means the deferred `START_AP`
+  (`cyw43_arch_enable_ap_mode` + netif + DHCP start) took 288 ms. The status
+  then showed `mode ap only, on ap`. Flash stayed at `slot 0 (seq 1)`.
+- The final image boots and joins STA again. `radio init 570 ms` is a one-time
+  core-0 stop at boot, accepted while disarmed (controller ruling).
+
 ## Not verified on hardware (PENDING, owner-run per Task 14)
 
 - AP fallback and automatic provisioning on the board. STA joined, so no
   provisioning write happened, and the agent may not change live settings.
 - AP DHCP phone/PC selection, STA broadcast discovery, 60 s STA retry, and
   owner setting changes on the live link.
-- AP start blocking time.
+- AP start blocking time: **measured, see below**.

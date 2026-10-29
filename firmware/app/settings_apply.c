@@ -44,18 +44,45 @@ settings_save_result_t settings_provision_ap_pass(const char *password) {
     uint32_t token;
     settings_save_result_t reserved = reserve_neutral(&token);
     if (reserved != SETTINGS_SAVE_OK) return reserved;
-    umb_settings_t settings;
-    shared_get_settings(&settings);
-    settings_save_result_t result = SETTINGS_SAVE_ALREADY_SET;
-    if (!settings.ap_pass[0]) {
-        strncpy(settings.ap_pass, password, sizeof settings.ap_pass - 1);
-        settings.ap_pass[sizeof settings.ap_pass - 1] = 0;
-        /* Commits are refused while the reservation is held, so the flashed copy
-         * equals the shared copy plus the credential published right after. */
-        bool ok = hal_settings_save(&settings) && shared_provision_ap_pass(token, password);
-        result = ok ? SETTINGS_SAVE_OK : SETTINGS_SAVE_FLASH_FAILED;
+    /* Write what flash already holds plus the credential, never unsaved RAM
+     * edits: provisioning must not silently save a pending `set`/`defaults`. */
+    umb_settings_t persisted, ram;
+    settings_save_result_t result = SETTINGS_SAVE_FLASH_FAILED;
+    shared_get_settings(&ram);
+    if (hal_settings_persisted(&persisted)) {
+        if (persisted.ap_pass[0]) {
+            /* Already provisioned in flash: restore RAM if it lost it; no write. */
+            if (!ram.ap_pass[0]) (void)shared_provision_ap_pass(token, persisted.ap_pass);
+            result = SETTINGS_SAVE_ALREADY_SET;
+        } else if (ram.ap_pass[0]) {
+            result = SETTINGS_SAVE_ALREADY_SET; /* owner set one in RAM; adopt it */
+        } else {
+            strncpy(persisted.ap_pass, password, sizeof persisted.ap_pass - 1);
+            persisted.ap_pass[sizeof persisted.ap_pass - 1] = 0;
+            /* Commits are refused while the reservation is held, so RAM cannot
+             * gain a different password between this check and the publish. */
+            bool ok = hal_settings_save(&persisted) && shared_provision_ap_pass(token, password);
+            result = ok ? SETTINGS_SAVE_OK : SETTINGS_SAVE_FLASH_FAILED;
+        }
     }
-    memset(&settings, 0, sizeof settings);
+    memset(&persisted, 0, sizeof persisted); memset(&ram, 0, sizeof ram);
+    shared_end_maintenance(token);
+    return result;
+}
+
+settings_save_result_t settings_restore_ap_pass(void) {
+    uint32_t token;
+    settings_save_result_t reserved = reserve_neutral(&token);
+    if (reserved != SETTINGS_SAVE_OK) return reserved;
+    umb_settings_t persisted, ram;
+    shared_get_settings(&ram);
+    settings_save_result_t result = SETTINGS_SAVE_ALREADY_SET;
+    if (!ram.ap_pass[0]) {
+        result = SETTINGS_SAVE_INVALID;
+        if (hal_settings_persisted(&persisted) && persisted.ap_pass[0] &&
+            shared_provision_ap_pass(token, persisted.ap_pass)) result = SETTINGS_SAVE_OK;
+    }
+    memset(&persisted, 0, sizeof persisted); memset(&ram, 0, sizeof ram);
     shared_end_maintenance(token);
     return result;
 }

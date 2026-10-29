@@ -24,7 +24,7 @@ static bool sta_started, ap_started, sta_reachable, ap_ok, rand_ok, flash_ok, cl
 static unsigned sta_starts, ap_starts, stops_with_link_up, stops, flash_calls, probe_calls;
 static unsigned blocking_calls_in_step, max_blocking_in_step;
 static char ap_pass_used[64];
-static umb_settings_t flashed;
+static umb_settings_t flashed, persisted;
 static hal_dhcp_client_t leases[UMB_DHCP_LEASES];
 static size_t lease_count;
 static uint8_t assoc[HAL_WIFI_AP_CLIENTS][6];
@@ -45,11 +45,11 @@ static void note_stop(void) {
     stops++; if (wifi) stops_with_link_up++;
 }
 bool hal_wifi_start_sta(const char *ssid, const char *password) {
-    sta_starts++; sta_started = ssid && password && ssid[0]; return sta_started;
+    sta_starts++; blocking_calls_in_step++; sta_started = ssid && password && ssid[0]; return sta_started;
 }
 void hal_wifi_stop_sta(void) { note_stop(); sta_started = false; }
 bool hal_wifi_start_ap(const char *ssid, const char *password) {
-    ap_starts++;
+    ap_starts++; blocking_calls_in_step++;
     if (!ssid || strncmp(ssid, "umbreon-", 8) || !password || strlen(password) < 8) return false;
     strcpy(ap_pass_used, password); ap_started = ap_ok; return ap_ok;
 }
@@ -84,8 +84,11 @@ bool hal_rand_fill16(uint8_t out[16]) {
     return rand_ok;
 }
 bool hal_settings_save(const umb_settings_t *s) {
-    flash_calls++; blocking_calls_in_step++; flashed = *s; return flash_ok;
+    flash_calls++; blocking_calls_in_step++; flashed = *s;
+    if (flash_ok) persisted = *s;
+    return flash_ok;
 }
+bool hal_settings_persisted(umb_settings_t *out) { *out = persisted; return true; }
 
 static umb_settings_t base(int mode) {
     now = 1000; sta_started = ap_started = false; sta_reachable = true;
@@ -104,7 +107,7 @@ static umb_settings_t base(int mode) {
     return s;
 }
 static void boot(net_owner_t *o, const umb_settings_t *s) {
-    shared_init(s); net_owner_init(o); net_owner_set_radio_ready(o, true, 0);
+    shared_init(s); persisted = *s; net_owner_init(o); net_owner_set_radio_ready(o, true, 0);
 }
 static void step(net_owner_t *o) {
     blocking_calls_in_step = 0;
@@ -115,6 +118,16 @@ static void step(net_owner_t *o) {
 static void run(net_owner_t *o, uint32_t ms) {
     uint32_t end = now + ms;
     while ((int32_t)(now - end) < 0) step(o);
+}
+/* Simulated control tick: consumes the latched loss/disarm like control_task. */
+static void control_tick(void) {
+    shared_arm_request_t r[SHARED_ARM_QUEUE_LEN]; umb_arm_result_t res[SHARED_ARM_QUEUE_LEN];
+    unsigned n = 0;
+    while (n < SHARED_ARM_QUEUE_LEN && shared_take_arm_record(&r[n], now)) res[n++] = UMB_ARM_OK;
+    umb_outputs_t idle = {.esc_us = 1500}; umb_arming_t arming = {0};
+    (void)shared_commit_arm_batch(r, res, n, &idle, &arming, now);
+    shared_publish_outputs(&idle);
+    shared_control_mailbox_t box; shared_take_control_mailbox(&box);
 }
 static bool wifi_link(void) { bool w, a; shared_get_link(&w, &a); return w; }
 static bool agent_link(void) { bool w, a; shared_get_link(&w, &a); return a; }
@@ -137,9 +150,9 @@ TEST(test_sta_join_is_async_and_configured_ip_selected) {
     umb_settings_t s = base(UMB_WIFI_AUTO); net_owner_t o; boot(&o, &s);
     sta_reachable = false;
     step(&o); step(&o); ASSERT_EQ(sta_starts, 1);
-    /* Joining: each iteration returns immediately, no probe, no flash. */
+    /* Joining: the async join start was the only blocking call; no probe, no flash. */
     for (int i = 0; i < 50; i++) step(&o);
-    ASSERT_EQ(max_blocking_in_step, 0); ASSERT_FALSE(wifi_link());
+    ASSERT_EQ(max_blocking_in_step, 1); ASSERT_FALSE(wifi_link());
     sta_reachable = true; step(&o);
     ASSERT_TRUE(wifi_link()); ASSERT_EQ(net().wifi_stage, UMB_WIFI_ON_STA);
     run(&o, 100);
@@ -200,6 +213,7 @@ TEST(test_missing_ap_pass_provisioned_once_then_ap_starts) {
     umb_settings_t s = base(UMB_WIFI_AP_ONLY); s.ap_pass[0] = 0; net_owner_t o; boot(&o, &s);
     run(&o, 50);
     ASSERT_EQ(flash_calls, 1); ASSERT_EQ(ap_starts, 1); ASSERT_TRUE(ap_started);
+    ASSERT_EQ(max_blocking_in_step, 1); /* flash write and AP start in separate iterations */
     ASSERT_EQ(strlen(ap_pass_used), UMB_AP_PASSWORD_LEN);
     ASSERT_TRUE(strcmp(flashed.ap_pass, ap_pass_used) == 0);
     ASSERT_TRUE(strcmp(flashed.wifi_pass, SYNTH_STA_PASS) == 0); /* complete settings */
@@ -281,6 +295,51 @@ TEST(test_sta_link_loss_latched_before_rejoin) {
     ASSERT_EQ(net().loop_last_ms, 3); ASSERT_EQ(net().loop_max_ms, 7);
 }
 
+TEST(test_defaults_keep_password_and_never_reprovision) {
+    umb_settings_t s = base(UMB_WIFI_AP_ONLY); s.ap_pass[0] = 0; net_owner_t o; boot(&o, &s);
+    run(&o, 100); ASSERT_EQ(flash_calls, 1);
+    char first[64]; strcpy(first, ap_pass_used);
+    /* Console `defaults` (unsaved): AP restarts with the same password, no write. */
+    umb_settings_t cur; uint32_t rev = shared_settings_snapshot(&cur);
+    umb_settings_t d = umb_settings_defaults_keeping_ap_pass(&cur);
+    d.wifi_mode = UMB_WIFI_AP_ONLY;
+    ASSERT_TRUE(shared_commit_settings(&d, rev, false));
+    run(&o, 2000);
+    ASSERT_EQ(flash_calls, 1); ASSERT_EQ(o.reconfigures, 1); ASSERT_EQ(ap_starts, 2);
+    ASSERT_TRUE(strcmp(ap_pass_used, first) == 0);
+    /* Even if RAM loses ap_pass by another path, the persisted one is restored. */
+    control_tick(); rev = shared_settings_snapshot(&cur); cur.ap_pass[0] = 0;
+    ASSERT_TRUE(shared_commit_settings(&cur, rev, false));
+    for (int i = 0; i < 300; i++) { step(&o); control_tick(); } /* control consumes the loss */
+    ASSERT_EQ(flash_calls, 1); ASSERT_TRUE(ap_started); ASSERT_EQ(o.reconfigures, 2);
+    ASSERT_TRUE(strcmp(ap_pass_used, first) == 0);
+    /* Fresh boot of a provisioned device whose RAM copy is empty: no write either. */
+    umb_settings_t ram = persisted; ram.ap_pass[0] = 0;
+    shared_init(&ram); net_owner_init(&o); net_owner_set_radio_ready(&o, true, 0);
+    ap_started = false; run(&o, 20000);
+    ASSERT_EQ(flash_calls, 1); ASSERT_TRUE(ap_started); ASSERT_TRUE(strcmp(ap_pass_used, first) == 0);
+}
+TEST(test_unsaved_edit_not_flashed_by_provisioning) {
+    umb_settings_t s = base(UMB_WIFI_AP_ONLY); s.ap_pass[0] = 0; net_owner_t o; boot(&o, &s);
+    umb_settings_t edit; uint32_t rev = shared_settings_snapshot(&edit);
+    edit.agent_port = 4242; ASSERT_TRUE(shared_commit_settings(&edit, rev, false));
+    run(&o, 100);
+    ASSERT_EQ(flash_calls, 1); ASSERT_EQ(flashed.agent_port, 8888);
+    ASSERT_TRUE(strcmp(flashed.ap_pass, ap_pass_used) == 0);
+    umb_settings_t now_s; shared_get_settings(&now_s); ASSERT_EQ(now_s.agent_port, 4242);
+}
+TEST(test_radio_starts_deferred_while_armed) {
+    umb_settings_t s = base(UMB_WIFI_STA_ONLY); net_owner_t o; boot(&o, &s);
+    umb_outputs_t armed = {.armed = true}; shared_publish_outputs(&armed);
+    run(&o, 3000); ASSERT_EQ(sta_starts, 0); ASSERT_FALSE(wifi_link());
+    umb_outputs_t idle = {.esc_us = 1500}; shared_publish_outputs(&idle);
+    run(&o, 100); ASSERT_EQ(sta_starts, 1); ASSERT_TRUE(wifi_link());
+    /* Link loss while armed: loss latched at once, the rejoin waits for disarm. */
+    shared_publish_outputs(&armed); sta_reachable = false; run(&o, 3000);
+    ASSERT_FALSE(wifi_link()); ASSERT_EQ(sta_starts, 1);
+    shared_publish_outputs(&idle); sta_reachable = true; run(&o, 200);
+    ASSERT_EQ(sta_starts, 2); ASSERT_TRUE(wifi_link()); ASSERT_TRUE(max_blocking_in_step <= 1);
+}
 int main(void) {
     RUN_TEST(test_offline_radio_never_touches_adapters);
     RUN_TEST(test_sta_join_is_async_and_configured_ip_selected);
@@ -291,5 +350,8 @@ int main(void) {
     RUN_TEST(test_auto_without_ap_pass_writes_only_when_ap_needed);
     RUN_TEST(test_owner_setting_change_staged_until_socket_closed);
     RUN_TEST(test_sta_link_loss_latched_before_rejoin);
+    RUN_TEST(test_defaults_keep_password_and_never_reprovision);
+    RUN_TEST(test_unsaved_edit_not_flashed_by_provisioning);
+    RUN_TEST(test_radio_starts_deferred_while_armed);
     TEST_SUMMARY();
 }

@@ -105,3 +105,11 @@ int umb_settings_pick_slot(const uint8_t *slot0, const uint8_t *slot1, size_t le
     if (seq) *seq = 0;
     return -1;
 }
+
+umb_settings_t umb_settings_defaults_keeping_ap_pass(const umb_settings_t *current)
+{
+    umb_settings_t s = umb_settings_defaults();
+    if (current) memcpy(s.ap_pass, current->ap_pass, sizeof s.ap_pass);
+    s.ap_pass[sizeof s.ap_pass - 1] = 0;
+    return s;
+}

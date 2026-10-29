@@ -57,7 +57,11 @@ void net_task(void *param) {
     for (;;) {
         uint32_t start = hal_now_ms();
         shared_core0_beat(start);
-        if (!s_owner.radio_ready && (int32_t)(start - next_radio_init) >= 0) {
+        umb_outputs_t outputs;
+        shared_get_outputs(&outputs);
+        /* Boot is disarmed; a later retry is deferred while armed because the
+         * bring-up blocks ~0.6 s (beyond the 500 ms core-0 stale-beat limit). */
+        if (!s_owner.radio_ready && !outputs.armed && (int32_t)(start - next_radio_init) >= 0) {
             /* One-time CYW43 bring-up (firmware download, not bounded by us); it is
              * reported separately and excluded from the steady-state loop metric. */
             bool ok = hal_wifi_init();

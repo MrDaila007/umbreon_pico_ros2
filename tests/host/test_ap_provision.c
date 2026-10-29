@@ -7,6 +7,10 @@ TEST(test_provisioned_device_never_due) {
     s = umb_ap_provision_result(s, UMB_PROV_RESULT_OK, 5);
     ASSERT_EQ(s.stage, UMB_PROV_DONE); ASSERT_EQ(s.writes, 1); ASSERT_EQ(s.failures, 0);
     ASSERT_FALSE(umb_ap_provision_due(s, true, 10));
+    /* Even if RAM loses the password later, a provisioned boot never regenerates. */
+    ASSERT_FALSE(umb_ap_provision_due(s, false, 10));
+    umb_ap_provision_t a = umb_ap_provision_result(umb_ap_provision_init(), UMB_PROV_RESULT_ALREADY, 0);
+    ASSERT_FALSE(umb_ap_provision_due(a, false, 100000));
 }
 TEST(test_busy_retries_soon_without_counting_a_write) {
     umb_ap_provision_t s = umb_ap_provision_init();

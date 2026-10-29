@@ -13,6 +13,10 @@ bool hal_settings_load(umb_settings_t *out);
  * control's neutral ACK. Temporarily extends the hardware watchdog around the write
  * (blocks ~one control period first). True on verified success. */
 bool hal_settings_save(const umb_settings_t *s);
+/* Copy of what flash holds now: the loaded blob (or the boot defaults when no slot
+ * was valid), updated after each verified save. Never includes unsaved RAM edits.
+ * Call only while holding the maintenance reservation (serializes with save). */
+bool hal_settings_persisted(umb_settings_t *out);
 /* Slot holding the newest valid blob (0 / 1), or -1 when running on defaults. */
 int hal_settings_slot(void);
 uint32_t hal_settings_seq(void);

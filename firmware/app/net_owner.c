@@ -59,7 +59,15 @@ static bool release_resources(net_owner_t *o) {
     return closed;
 }
 
+/* Radio start/stop SDK calls block for hundreds of ms; never while armed. */
+static bool radio_ops_allowed(void) {
+    umb_outputs_t out;
+    shared_get_outputs(&out);
+    return !out.armed;
+}
+
 static void reconfigure(net_owner_t *o, const umb_settings_t *latest) {
+    if (!radio_ops_allowed()) return; /* staged until disarmed */
     set_link(o, false);
     if (!release_resources(o)) return; /* staged: retried next iteration */
     hal_wifi_stop_sta();
@@ -94,13 +102,30 @@ static umb_prov_result_t provision_once(net_owner_t *o) {
     return r;
 }
 
+/* Provisioned this boot but RAM lost the password: restore it, never regenerate. */
+static void restore_pass(net_owner_t *o) {
+    uint32_t now = hal_now_ms();
+    if (!due(now, o->next_restore_ms)) return;
+    o->next_restore_ms = now + NET_OWNER_RESTORE_RETRY_MS;
+    settings_save_result_t r = settings_restore_ap_pass();
+    if (r == SETTINGS_SAVE_OK || r == SETTINGS_SAVE_ALREADY_SET) {
+        umb_settings_t current; shared_get_settings(&current);
+        memcpy(o->active.ap_pass, current.ap_pass, sizeof o->active.ap_pass);
+        memset(&current, 0, sizeof current);
+    }
+}
+
 /* Only when the FSM is about to start the AP and no password exists. A failure
- * leaves ap_pass empty, so net_wifi refuses the AP start (never an open AP). */
-static void maybe_provision(net_owner_t *o) {
-    if (!(o->wifi.deferred_actions & UMB_NET_START_AP) || o->active.ap_pass[0]) return;
-    if (!umb_ap_provision_due(o->provision, false, hal_now_ms())) return;
+ * leaves ap_pass empty, so net_wifi refuses the AP start (never an open AP).
+ * Returns true when it attempted blocking work: the caller ends the iteration
+ * so the AP start happens on the next one, after a heartbeat. */
+static bool maybe_provision(net_owner_t *o) {
+    if (!(o->wifi.deferred_actions & UMB_NET_START_AP) || o->active.ap_pass[0]) return false;
+    if (o->provision.stage == UMB_PROV_DONE) { restore_pass(o); return true; }
+    if (!umb_ap_provision_due(o->provision, false, hal_now_ms())) return false;
     umb_prov_result_t r = provision_once(o);
     o->provision = umb_ap_provision_result(o->provision, r, hal_now_ms());
+    return true;
 }
 
 static bool link_up(const net_owner_t *o) {
@@ -108,7 +133,7 @@ static bool link_up(const net_owner_t *o) {
            (o->wifi.policy.stage == UMB_WIFI_ON_AP && o->wifi.status.ap_up);
 }
 
-static void run_endpoint(net_owner_t *o, bool up) {
+static void run_endpoint(net_owner_t *o, bool up, bool may_block) {
     umb_endpoint_mode_t mode = !up ? UMB_ENDPOINT_OFF :
         o->wifi.policy.stage == UMB_WIFI_ON_STA ? UMB_ENDPOINT_STA : UMB_ENDPOINT_AP;
     uint32_t now = hal_now_ms();
@@ -122,7 +147,7 @@ static void run_endpoint(net_owner_t *o, bool up) {
         o->next_refresh_ms = now + NET_OWNER_REFRESH_MS;
     }
     if (o->probe_owned) { o->probe_owned = !hal_udp_probe_close(); return; }
-    if (mode == UMB_ENDPOINT_OFF || o->endpoint.policy.selected || !due(now, o->next_probe_ms)) return;
+    if (!may_block || mode == UMB_ENDPOINT_OFF || o->endpoint.policy.selected || !due(now, o->next_probe_ms)) return;
     uint32_t before = o->endpoint.probes;
     bool selected = net_endpoint_probe_once(&o->endpoint);
     if (o->endpoint.probes == before) return;
@@ -165,14 +190,18 @@ void net_owner_step(net_owner_t *o) {
     o->active.agent_ip = latest.agent_ip; o->active.agent_port = latest.agent_port;
     if (!o->radio_ready) set_link(o, false);
     else if (!wifi_fields_equal(&o->active, &latest)) reconfigure(o, &latest);
-    else {
-        maybe_provision(o);
-        net_wifi_result_t r = net_wifi_step(&o->wifi, &o->active, o->probe_owned);
+    else if (!maybe_provision(o)) {
+        uint8_t pending = o->wifi.deferred_actions;
+        /* Armed: busy defers radio I/O and the autonomous AP->STA retry; loss is
+         * still reported (and disarms), so the wait is about one control tick. */
+        bool busy = o->probe_owned || !radio_ops_allowed();
+        net_wifi_result_t r = net_wifi_step(&o->wifi, &o->active, busy);
         if (r.action_failed) o->wifi_errors++;
+        bool radio_io = pending && !o->wifi.deferred_actions;
         bool up = link_up(o) && !r.loss && !r.needs_teardown;
         set_link(o, up);
         if (r.loss || r.needs_teardown) (void)release_resources(o);
-        run_endpoint(o, up);
+        run_endpoint(o, up, !radio_io);
     }
     memset(&latest, 0, sizeof latest);
     publish(o);

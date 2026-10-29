@@ -4,7 +4,8 @@ umb_ap_provision_t umb_ap_provision_init(void) {
     return s;
 }
 bool umb_ap_provision_due(umb_ap_provision_t s, bool have_password, uint32_t now_ms) {
-    if (have_password || s.stage == UMB_PROV_GAVE_UP) return false;
+    /* DONE is final for this boot: a provisioned device never regenerates. */
+    if (have_password || s.stage == UMB_PROV_GAVE_UP || s.stage == UMB_PROV_DONE) return false;
     return s.stage != UMB_PROV_BACKOFF || (int32_t)(now_ms - s.retry_ms) >= 0;
 }
 static umb_ap_provision_t backoff(umb_ap_provision_t s, uint32_t now_ms) {
