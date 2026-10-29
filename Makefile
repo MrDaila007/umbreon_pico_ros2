@@ -24,4 +24,4 @@ fw:
 	@echo "make fw: not implemented yet (Task 12)"; exit 1
 
 microros:
-	@echo "make microros: not implemented yet (Task 2)"; exit 1
+	./micro_ros/build.sh
