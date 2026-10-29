@@ -321,6 +321,22 @@ TEST(test_reflex_names) {
     ASSERT_TRUE(strcmp(umb_reflex_name((umb_reflex_id_t)-1), "unknown") == 0);
 }
 
+TEST(test_reflex_nan_speed_still_blocks) {
+    umb_settings_t c = umb_settings_defaults();
+    umb_sensor_in_t s = tof(100);
+    umb_reflex_out_t o = step1(UMB_DRIVE_AUTO, &s, NAN, &c);
+    ASSERT_TRUE(o.detected_mask & BIT(UMB_REFLEX_COLLISION));
+    ASSERT_TRUE(o.block_forward);
+    ASSERT_FALSE(o.emergency_brake);
+    ASSERT_TRUE(isinf(o.ttc_ms));
+    o = step1(UMB_DRIVE_AUTO, &s, INFINITY, &c);
+    ASSERT_TRUE(o.block_forward);
+    ASSERT_TRUE(isinf(o.ttc_ms));
+    o = step1(UMB_DRIVE_MANUAL, &s, NAN, &c);
+    ASSERT_TRUE(o.detected_mask & BIT(UMB_REFLEX_COLLISION));
+    ASSERT_FALSE(o.block_forward);
+}
+
 int main(void) {
     RUN_TEST(test_reflex_nothing_present_no_effect);
     RUN_TEST(test_reflex_collision_auto_brakes);
@@ -330,6 +346,7 @@ int main(void) {
     RUN_TEST(test_reflex_reverse_not_blocked);
     RUN_TEST(test_reflex_stopped_near_blocks_forward_no_brake);
     RUN_TEST(test_reflex_invalid_tof_ignored);
+    RUN_TEST(test_reflex_nan_speed_still_blocks);
     RUN_TEST(test_reflex_speed_cap_linear);
     RUN_TEST(test_reflex_speed_cap_manual_warn_no_cap);
     RUN_TEST(test_reflex_caps_take_minimum);

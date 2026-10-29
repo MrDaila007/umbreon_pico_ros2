@@ -33,7 +33,7 @@ static umb_reflex_action_t action_for(umb_drive_mode_t mode, umb_reflex_id_t id,
 }
 
 static dist_t measure(const umb_sensor_in_t *s, float speed, const umb_settings_t *c) {
-    dist_t d = { NO_READING_MM, INFINITY, false, speed > MOVING_MS };
+    dist_t d = { NO_READING_MM, INFINITY, false, isfinite(speed) && speed > MOVING_MS };
     if (s->tof_present) {
         for (int i = 0; i < TOF_COUNT; i++) {
             int16_t mm = s->tof_mm[i];
@@ -117,7 +117,7 @@ umb_reflex_t umb_reflex_step(umb_reflex_t r, umb_drive_mode_t mode, const umb_se
         if (d.moving_fwd) {
             brake = d.ttc_ms < (float)c->ttc_ms || near_front;
             block = brake;
-        } else if (speed_signed <= MOVING_MS) {
+        } else {   /* stopped, reversing, or non-finite speed: fail safe */
             block = near_front;
         }
         det[UMB_REFLEX_COLLISION] = block;
