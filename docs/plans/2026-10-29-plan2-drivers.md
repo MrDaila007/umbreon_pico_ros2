@@ -73,7 +73,7 @@ docs/hil/          plan2-sensor-checklist.md
 **Interfaces:**
 - Produces: the host build picks up `firmware/drivers/*.c` and `tests/host/fake_*.c` automatically, and coverage covers drivers.
 
-- [ ] **Step 1:** `git checkout -b plan2-drivers plan1-foundation`.
+- [ ] **Step 1:** Branch `plan2-drivers` already exists (cut from `plan1-foundation`, holds this plan) — work on it.
 - [ ] **Step 2: Write the failing test** `test_reflex_nan_accel_is_imu_fault`: AUTO, `imu_present = imu_ok = true`, `accel_g = {NAN, 0, 1}` → `UMB_REFLEX_SENSOR_FAULT` is in `detected_mask`, impact is not detected, `!stop`, `!disarm`. Same for `INFINITY`.
 - [ ] **Step 3:** Run `make test`. Expected: FAIL.
 - [ ] **Step 4:** In `umb_reflex_step`, a non-finite accel component counts as an IMU fault: sensor_fault is detected, and impact/upside checks are skipped for that step.
