@@ -1,6 +1,6 @@
 /* Core-0 WiFi orchestration. Owner initializes CYW43 first, then calls every
  * bounded iteration. It must process loss/clear readiness before the next call.
- * Production loop wiring and persistent AP provisioning are separate stages. */
+ * net_owner provisions a missing AP password before a START_AP is applied. */
 #pragma once
 #include "umb_net_fsm.h"
 #include "umb_settings.h"

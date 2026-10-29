@@ -8,6 +8,8 @@
 static uint32_t clock_ms;
 static bool give_ack, flash_ok, rejected_arm, rejected_settings;
 static int flash_calls;
+static umb_settings_t flashed;
+#include <string.h>
 uint32_t hal_now_ms(void) { return clock_ms; }
 TickType_t xTaskGetTickCount(void) { return clock_ms; }
 void vTaskDelay(TickType_t ticks) {
@@ -18,7 +20,7 @@ void vTaskDelay(TickType_t ticks) {
     }
 }
 bool hal_settings_save(const umb_settings_t *s) {
-    (void)s; flash_calls++;
+    flashed = *s; flash_calls++;
     rejected_arm = !shared_post_arm_request(SHARED_ARM_CAR);
     umb_settings_t settings; uint32_t revision = shared_settings_snapshot(&settings);
     rejected_settings = !shared_commit_settings(&settings, revision, false);
@@ -59,10 +61,55 @@ TEST(test_save_armed_or_queued_refused_without_flash) {
     ASSERT_EQ(settings_save_current(), SETTINGS_SAVE_BUSY);
     ASSERT_EQ(flash_calls, 0);
 }
+#define TEST_AP_PASS "SYNTH3T1CPASS234"
+TEST(test_provision_persists_complete_settings_then_publishes) {
+    setup();
+    umb_settings_t edit; uint32_t rev = shared_settings_snapshot(&edit);
+    edit.agent_port = 9999; ASSERT_TRUE(shared_commit_settings(&edit, rev, false));
+    ASSERT_EQ(settings_provision_ap_pass(TEST_AP_PASS), SETTINGS_SAVE_OK);
+    ASSERT_EQ(flash_calls, 1);
+    ASSERT_TRUE(strcmp(flashed.ap_pass, TEST_AP_PASS) == 0);
+    ASSERT_EQ(flashed.agent_port, 9999);   /* complete current settings, not defaults */
+    umb_settings_t now; uint32_t after = shared_settings_snapshot(&now);
+    ASSERT_TRUE(strcmp(now.ap_pass, TEST_AP_PASS) == 0);
+    ASSERT_EQ(after, rev + 2);               /* edit, then provisioning */
+    ASSERT_TRUE(shared_settings_write_allowed());
+    /* A second call never rewrites an already provisioned credential. */
+    ASSERT_EQ(settings_provision_ap_pass("OTHERPASSWORD234"), SETTINGS_SAVE_ALREADY_SET);
+    ASSERT_EQ(flash_calls, 1);
+    shared_get_settings(&now); ASSERT_TRUE(strcmp(now.ap_pass, TEST_AP_PASS) == 0);
+}
+TEST(test_provision_flash_failure_leaves_ram_unprovisioned) {
+    setup(); flash_ok = false;
+    ASSERT_EQ(settings_provision_ap_pass(TEST_AP_PASS), SETTINGS_SAVE_FLASH_FAILED);
+    umb_settings_t now; shared_get_settings(&now); ASSERT_EQ(now.ap_pass[0], 0);
+    ASSERT_TRUE(shared_settings_write_allowed());
+    setup(); give_ack = false;
+    ASSERT_EQ(settings_provision_ap_pass(TEST_AP_PASS), SETTINGS_SAVE_NEUTRAL_TIMEOUT);
+    ASSERT_EQ(flash_calls, 0);
+    setup(); umb_outputs_t o = {.armed = true}; shared_publish_outputs(&o);
+    ASSERT_EQ(settings_provision_ap_pass(TEST_AP_PASS), SETTINGS_SAVE_BUSY);
+    ASSERT_EQ(flash_calls, 0);
+}
+TEST(test_provision_rejects_invalid_password_without_flash) {
+    setup();
+    ASSERT_EQ(settings_provision_ap_pass(NULL), SETTINGS_SAVE_INVALID);
+    ASSERT_EQ(settings_provision_ap_pass("short"), SETTINGS_SAVE_INVALID);
+    ASSERT_EQ(settings_provision_ap_pass("bad\tpassword12"), SETTINGS_SAVE_INVALID);
+    char long_pass[70]; memset(long_pass, 'A', 69); long_pass[69] = 0;
+    ASSERT_EQ(settings_provision_ap_pass(long_pass), SETTINGS_SAVE_INVALID);
+    ASSERT_EQ(flash_calls, 0);
+    ASSERT_TRUE(shared_settings_write_allowed());
+    /* The reservation-scoped commit refuses a stale or absent reservation. */
+    ASSERT_FALSE(shared_provision_ap_pass(1, TEST_AP_PASS));
+}
 int main(void) {
     RUN_TEST(test_save_waits_for_neutral_and_blocks_racing_producers);
     RUN_TEST(test_save_ack_timeout_never_touches_flash_and_releases);
     RUN_TEST(test_save_failure_releases_reservation);
     RUN_TEST(test_save_armed_or_queued_refused_without_flash);
+    RUN_TEST(test_provision_persists_complete_settings_then_publishes);
+    RUN_TEST(test_provision_flash_failure_leaves_ram_unprovisioned);
+    RUN_TEST(test_provision_rejects_invalid_password_without_flash);
     TEST_SUMMARY();
 }

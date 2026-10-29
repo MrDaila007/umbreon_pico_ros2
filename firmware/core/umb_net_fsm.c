@@ -55,7 +55,8 @@ umb_wifi_state_t umb_wifi_step(umb_wifi_state_t s, const umb_wifi_config_t *c,
             s.stage = UMB_WIFI_ON_AP; s.ap_retry_ms = in->now_ms + STA_RETRY_MS; s.backoff_ms = 1000;
         } else if (in->error || due(in->now_ms, s.deadline_ms)) {
             out->actions = UMB_NET_STOP_AP;
-            s = wifi_backoff(s, in->now_ms, true);
+            /* AUTO with credentials rejoins the station first on the next attempt. */
+            s = wifi_backoff(s, in->now_ms, c->mode != UMB_WIFI_AUTO || !c->credentials);
         }
         break;
     case UMB_WIFI_ON_STA:

@@ -163,11 +163,28 @@ TEST(test_session_finding_success_and_ping_timeouts_across_wrap) {
     ASSERT_TRUE(out.loss); ASSERT_EQ(out.action, UMB_SESSION_ACT_DESTROY);
 }
 
+TEST(test_wifi_auto_failed_ap_start_retries_station_first) {
+    /* AUTO with credentials: a failed AP start (e.g. password not provisioned yet)
+     * must not trap the radio in AP retries; the next attempt rejoins the station. */
+    umb_wifi_config_t c = {UMB_WIFI_AUTO, true, 1000};
+    umb_wifi_in_t in = {0}; umb_wifi_out_t out;
+    umb_wifi_state_t s = umb_wifi_step(umb_wifi_init(), &c, &in, &out);
+    in.now_ms = 1000; s = umb_wifi_step(s, &c, &in, &out);
+    ASSERT_EQ(out.actions, UMB_NET_STOP_STA | UMB_NET_START_AP);
+    in.error = true; s = umb_wifi_step(s, &c, &in, &out);
+    ASSERT_EQ(s.stage, UMB_WIFI_BACKOFF); ASSERT_FALSE(s.retry_ap);
+    in.error = false; in.now_ms = s.deadline_ms; s = umb_wifi_step(s, &c, &in, &out);
+    ASSERT_EQ(out.actions, UMB_NET_START_STA); ASSERT_EQ(s.stage, UMB_WIFI_JOINING);
+    /* Without station credentials AUTO keeps retrying the AP. */
+    c.credentials = false; s = umb_wifi_step(umb_wifi_init(), &c, &in, &out);
+    in.error = true; s = umb_wifi_step(s, &c, &in, &out); ASSERT_TRUE(s.retry_ap);
+}
 int main(void) {
     RUN_TEST(test_wifi_failed_startups_backoff_without_mode_leak);
     RUN_TEST(test_session_endpoint_loss_and_timed_operations_release_before_retry);
     RUN_TEST(test_session_finding_success_and_ping_timeouts_across_wrap);
     RUN_TEST(test_wifi_station_fallback_and_ap_retry);
+    RUN_TEST(test_wifi_auto_failed_ap_start_retries_station_first);
     RUN_TEST(test_wifi_preferences_and_missing_credentials);
     RUN_TEST(test_wifi_join_success_loss_and_wrap);
     RUN_TEST(test_wifi_mode_changes_wait_for_session);

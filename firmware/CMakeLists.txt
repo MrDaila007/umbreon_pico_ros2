@@ -73,6 +73,7 @@ set(FW_SRCS
     hal/hal_wifi.c
     hal/hal_dhcp_server.c
     hal/hal_udp_probe.c
+    hal/hal_rand.c
     hal/hal_udp_transport.c
     hal/hal_i2c.c
     hal/hal_gpio_misc.c
@@ -81,6 +82,7 @@ set(FW_SRCS
     hal/hal_encoder.c
     app/settings_apply.c
     app/net_task.c
+    app/net_owner.c
     app/net_endpoint.c
     app/net_wifi.c
     app/ros_commands.c
@@ -118,6 +120,7 @@ target_link_libraries(umbreon_pico_ros2
     pico_stdlib
     pico_cyw43_arch_lwip_sys_freertos
     pico_flash
+    pico_rand
     hardware_pwm
     hardware_i2c
     hardware_adc

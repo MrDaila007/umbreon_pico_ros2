@@ -455,26 +455,30 @@ main/task pinning, allocator tests.
 
 ## Task 6: WiFi mode orchestration and endpoint selection
 
-**In progress:** pure endpoint selection is verified in
-`docs/validation/plan3-task6-endpoints.md`; orchestration/provisioning remain open.
+**Done (software):** see `docs/validation/plan3-task6-endpoints.md` for host
+and bare-board evidence. AP-side behaviour on hardware is PENDING (Task 14).
 
 **Files:** net_task WiFi stages, settings_apply provisioning, shared_network.
 
-- [ ] Connect the pure FSM to adapters. Offline operation still gives bounded
+- [x] Connect the pure FSM to adapters. Offline operation still gives bounded
   heartbeat iterations and a responsive console. No 15-second blocking join loop.
-- [ ] On first missing AP password: generate from Pico RNG/hardware entropy,
+  (Hardware: async join verified; one SDK STA-enable iteration measured 243 ms.)
+- [x] On first missing AP password: generate from Pico RNG/hardware entropy,
   acquire maintenance, persist/verify once while neutral, release, and start AP.
   Persistence failure leaves AP disabled and a clear non-secret error; retry with
   backoff, no flash-write loop. Already provisioned devices perform no boot write.
-- [ ] STA configured IP takes priority. Zero IP -> bounded subnet-broadcast XRCE
+  (Host-verified; watchdog-extended flash write verified by one bench `save`.)
+- [x] STA configured IP takes priority. Zero IP -> bounded subnet-broadcast XRCE
   probe; optional multicast only if verified on this transport/library. After a
   bounded round, remain offline and retry instead of blocking the task.
-- [ ] AP mode probes DHCP candidates even if a STA fixed IP exists. Only a valid
+  (Configured-IP XRCE probe verified on hardware; multicast not implemented.)
+- [x] AP mode probes DHCP candidates even if a STA fixed IP exists. Only a valid
   XRCE agent reply selects the endpoint; expired/disconnected lease invalidates
   selection. Never switch WiFi mode while a session is ready or being created.
-- [ ] Before mode/endpoint changes, notify loss and clear ready flags; tear down
+  (Host-verified; Task 9 must feed session state into the FSM busy flag.)
+- [x] Before mode/endpoint changes, notify loss and clear ready flags; tear down
   old objects/socket before reconfiguration. No pending command crosses sessions.
-- [ ] Fake-time end-to-end tests cover STA/AP retry, owner setting changes and a
+- [x] Fake-time end-to-end tests cover STA/AP retry, owner setting changes and a
   phone-first/PC-second DHCP lease sequence. Commit
   `feat: station and AP fallback with bounded agent selection`.
 

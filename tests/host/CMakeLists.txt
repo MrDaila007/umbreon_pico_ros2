@@ -125,3 +125,17 @@ target_include_directories(test_ros_services PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/task_stubs
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)
+
+# Network owner end to end: real owner, WiFi/endpoint bridges, provisioning
+# coordinator and shared state under fake time, radio, sockets and flash.
+target_sources(test_net_owner PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/net_owner.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/net_wifi.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/net_endpoint.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/settings_apply.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/shared_state.c)
+target_include_directories(test_net_owner PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/task_stubs
+  ${CMAKE_CURRENT_SOURCE_DIR}/../net/stubs
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)

@@ -32,6 +32,7 @@ typedef struct {
     int cue;
     bool cue_pending;
     int encoder_state;
+    shared_network_t network;
 } shared_t;
 
 static shared_t s_shared;
@@ -480,6 +481,33 @@ bool shared_maintenance_active(void) {
     bool active = s_shared.maintenance;
     unlock(irq);
     return active;
+}
+
+void shared_publish_network(const shared_network_t *n) {
+    uint32_t irq = lock();
+    s_shared.network = *n;
+    unlock(irq);
+}
+
+void shared_get_network(shared_network_t *out) {
+    uint32_t irq = lock();
+    *out = s_shared.network;
+    unlock(irq);
+}
+
+bool shared_provision_ap_pass(uint32_t id, const char *password) {
+    if (!password || !password[0]) return false;
+    char pass[sizeof s_shared.settings.ap_pass] = {0};
+    strncpy(pass, password, sizeof pass - 1);
+    uint32_t irq = lock();
+    bool ok = s_shared.maintenance && s_shared.maintenance_id == id && !s_shared.settings.ap_pass[0];
+    if (ok) {
+        memcpy(s_shared.settings.ap_pass, pass, sizeof pass);
+        s_shared.settings_revision++;
+    }
+    unlock(irq);
+    memset(pass, 0, sizeof pass);
+    return ok;
 }
 
 void shared_end_maintenance(uint32_t id) {

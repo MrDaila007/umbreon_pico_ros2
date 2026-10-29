@@ -58,6 +58,41 @@ static void print_reflex_mask(const char *label, uint32_t mask) {
     }
 }
 
+static const char *const WIFI_MODES[] = { "auto", "sta only", "ap only" };
+static const char *const WIFI_STAGES[] = { "idle", "joining", "starting ap", "on sta", "on ap", "backoff" };
+static const char *const ENDPOINT_METHODS[] = { "none", "configured", "broadcast", "dhcp" };
+static const char *const AP_PASS_STAGES[] = { "pending", "retrying", "provisioned", "FAILED (AP disabled)" };
+static const char *const AP_PASS_RESULTS[] = { "-", "ok", "already set", "armed/busy", "no entropy", "flash" };
+#define NAME(table, i) ((unsigned)(i) < sizeof table / sizeof table[0] ? table[i] : "?")
+
+static void print_ip(uint32_t ip) {
+    printf("%lu.%lu.%lu.%lu", (unsigned long)(ip >> 24), (unsigned long)((ip >> 16) & 255u),
+           (unsigned long)((ip >> 8) & 255u), (unsigned long)(ip & 255u));
+}
+
+/* No credentials or STA SSID are printed; the AP SSID is public by design. */
+static void print_network(const umb_settings_t *s) {
+    shared_network_t n;
+    shared_get_network(&n);
+    printf("network: mode %s, %s, radio %s", NAME(WIFI_MODES, n.wifi_mode), NAME(WIFI_STAGES, n.wifi_stage),
+           n.radio_ready ? "ok" : "not ready");
+    if (n.wifi_up) { printf(", ip "); print_ip(n.local_ip); }
+    if (n.sta_up && n.rssi_valid) printf(", rssi %ld dBm", (long)n.rssi);
+    printf("\nendpoint: ");
+    if (n.endpoint_selected) { print_ip(n.endpoint_ip); printf(":%u (%s)", (unsigned)n.endpoint_port,
+                                                              NAME(ENDPOINT_METHODS, n.endpoint_method)); }
+    else printf("none");
+    printf(", probes %lu failed %lu, losses link %lu endpoint %lu, reconfig %lu, wifi errors %lu\n",
+           (unsigned long)n.probes, (unsigned long)n.probe_failures, (unsigned long)n.link_losses,
+           (unsigned long)n.endpoint_losses, (unsigned long)n.reconfigures, (unsigned long)n.wifi_errors);
+    printf("ap: ssid %s, password %s", n.ap_ssid[0] ? n.ap_ssid : "?",
+           s->ap_pass[0] ? "set" : NAME(AP_PASS_STAGES, n.ap_pass_stage));
+    if (n.ap_pass_failures) printf(" (failures %lu, last %s)", (unsigned long)n.ap_pass_failures,
+                                   NAME(AP_PASS_RESULTS, n.ap_pass_last));
+    printf("\nnet loop: last %lu ms, max %lu ms, radio init %lu ms%s\n", (unsigned long)n.loop_last_ms,
+           (unsigned long)n.loop_max_ms, (unsigned long)n.radio_init_ms, n.probe_owned ? ", probe socket held" : "");
+}
+
 static void print_status(void) {
     umb_outputs_t o;
     umb_arming_t a;
@@ -85,9 +120,11 @@ static void print_status(void) {
     if (hal_settings_slot() < 0) printf("settings: defaults\n");
     else printf("settings: slot %d (seq %lu)\n", hal_settings_slot(), (unsigned long)hal_settings_seq());
     printf("link: wifi %s, agent %s\n", wifi ? "up" : "down", agent ? "up" : "down");
+    print_network(&s);
     int enc = shared_encoder_state();
     printf("encoder: %s\n", (enc >= 0 && enc <= SHARED_ENC_FAILED) ? ENCODER_STATES[enc] : "?");
     printf("reset: %s\n", s_reset_reason);
+    printf("watchdog: %lu ms left\n", (unsigned long)watchdog_get_time_remaining_ms());
 }
 
 /* Minimum free stack ever seen per task, in words (uxTaskGetStackHighWaterMark). */
@@ -238,8 +275,11 @@ static void save_settings(void) {
     case SETTINGS_SAVE_BUSY: printf("refused: armed or busy\n"); break;
     case SETTINGS_SAVE_NEUTRAL_TIMEOUT: printf("error: neutral acknowledgement timeout\n"); break;
     case SETTINGS_SAVE_FLASH_FAILED: printf("error: save failed\n"); break;
+    case SETTINGS_SAVE_ALREADY_SET: /* provisioning-only results */
+    case SETTINGS_SAVE_INVALID: printf("error: save failed\n"); break;
     case SETTINGS_SAVE_OK:
-        printf("ok: saved to slot %d (seq %lu)\n", hal_settings_slot(), (unsigned long)hal_settings_seq());
+        printf("ok: saved to slot %d (seq %lu, flash write %lu ms)\n", hal_settings_slot(),
+               (unsigned long)hal_settings_seq(), (unsigned long)hal_settings_last_write_ms());
         break;
     }
 }

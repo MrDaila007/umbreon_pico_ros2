@@ -84,6 +84,24 @@ void shared_ack_maintenance(uint32_t id);
 bool shared_maintenance_acknowledged(uint32_t id);
 void shared_end_maintenance(uint32_t id);
 bool shared_maintenance_active(void); /* any reservation held (non-consuming read) */
+/* Only for first-boot provisioning after its verified flash write: sets ap_pass
+ * if reservation `id` is held and no AP password exists yet. Bumps the revision. */
+bool shared_provision_ap_pass(uint32_t id, const char *password);
+
+/* Network owner status for console/OLED/diagnostics. Never holds credentials;
+ * the STA SSID is omitted too. Published by the core-0 network task only. */
+typedef struct {
+    uint8_t wifi_mode, wifi_stage, endpoint_method, ap_pass_stage, ap_pass_last;
+    bool radio_ready, wifi_up, sta_up, ap_up, rssi_valid, endpoint_selected, probe_owned;
+    int32_t rssi;
+    uint32_t local_ip, endpoint_ip;
+    uint16_t endpoint_port;
+    char ap_ssid[13];
+    uint32_t probes, probe_failures, wifi_errors, reconfigures, link_losses;
+    uint32_t endpoint_losses, ap_pass_failures, loop_last_ms, loop_max_ms, radio_init_ms;
+} shared_network_t;
+void shared_publish_network(const shared_network_t *n);
+void shared_get_network(shared_network_t *out);
 
 #define SHARED_ARM_QUEUE_LEN 8u
 typedef struct {

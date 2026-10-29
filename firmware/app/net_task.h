@@ -1,4 +1,4 @@
-/* Staged network owner. Task6 wires network policy; this task owns platform initialization. */
+/* Core-0 network task: platform init, CYW43 bring-up, then net_owner iterations. */
 #pragma once
 #include "FreeRTOS.h"
 #define NET_TASK_PRIORITY (tskIDLE_PRIORITY + 3)

@@ -11,7 +11,7 @@ cc -std=c11 -Wall -Wextra -Werror -g -fno-omit-frame-pointer \
 ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1 build/net-sanitizers/test-dhcp
 # Pure endpoint and ROS-field conversion exercise bounded snapshot counts and
 # double-to-float extremes; float-cast-overflow also checks test assertions.
-for module in endpoint ros_command; do
+for module in endpoint ros_command network_identity ap_provision; do
   cc -std=c11 -Wall -Wextra -Werror -g -fno-omit-frame-pointer \
     -fsanitize=address,undefined,float-cast-overflow -fno-sanitize-recover=all \
     -I firmware/core -I tests/host "tests/host/test_${module}.c" "firmware/core/umb_${module}.c" \

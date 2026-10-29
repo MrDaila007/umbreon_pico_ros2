@@ -18,6 +18,12 @@ bool hal_wifi_init(void) {
     if (s_initialized) return true;
     if (get_core_num() != 0 || xTaskGetSchedulerState() != taskSCHEDULER_RUNNING) return false;
     if (cyw43_arch_init_with_country(CYW43_COUNTRY_WORLDWIDE) != 0) return false;
+    /* cyw43_arch_init does not power the WLAN chip: the first ioctl downloads its
+     * firmware (~0.8 s measured) and only then fills the cached MAC. Do that here,
+     * with a read-only query, so later mode switches stay short and the AP SSID
+     * never derives from an all-zero MAC. */
+    uint32_t pm;
+    if (cyw43_wifi_get_pm(&cyw43_state, &pm) != 0) { cyw43_arch_deinit(); return false; }
     s_initialized = true;
     return true;
 }
@@ -75,7 +81,10 @@ bool hal_wifi_mac(uint8_t mac[6]) {
     if (!s_initialized || !mac) return false;
     cyw43_arch_lwip_begin();
     bool ok = cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_STA, mac) == 0;
-    cyw43_arch_lwip_end(); return ok;
+    cyw43_arch_lwip_end();
+    bool zero = true;
+    for (int i = 0; i < 6; i++) if (mac[i]) zero = false;
+    return ok && !zero; /* zero = chip not brought up yet */
 }
 int hal_wifi_ap_clients(uint8_t macs[HAL_WIFI_AP_CLIENTS][6]) {
     if (!s_initialized || !s_ap || !macs) return -1;
