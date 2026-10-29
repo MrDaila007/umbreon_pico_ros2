@@ -107,3 +107,12 @@ target_sources(test_net_wifi PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/
 target_include_directories(test_net_wifi PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)
+
+# Callback mailbox adapter uses real shared state; ROS entities bind it in Task9.
+target_sources(test_ros_commands PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/ros_commands.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/shared_state.c)
+target_include_directories(test_ros_commands PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/task_stubs
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)

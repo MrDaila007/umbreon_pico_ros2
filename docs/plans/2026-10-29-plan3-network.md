@@ -480,9 +480,13 @@ main/task pinning, allocator tests.
 
 ## Task 7: Command mapping and acknowledged arming
 
+**In progress:** mapping/mailbox adapter verified in
+`docs/validation/plan3-task7-commands.md`; service ACK handler and entity binding
+remain open.
+
 **Files:** umb_ros_command, ros_services arm handler, control/shared ACK tests.
 
-- [ ] Failing pure tests cover all three topic mappings, signed reverse, zero
+- [x] Pure tests cover all three topic mappings, signed reverse, zero
   command, steering clamp, NaN/Inf, unsupported axes and no mailbox write on reject.
 - [ ] ROS callbacks stamp receive time locally and post only for the current ready
   generation. History depth1; no replay of cached commands during lifecycle setup.

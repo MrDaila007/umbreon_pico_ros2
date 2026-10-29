@@ -83,6 +83,7 @@ set(FW_SRCS
     app/net_task.c
     app/net_endpoint.c
     app/net_wifi.c
+    app/ros_commands.c
     app/shared_state.c
     app/control_task.c
     app/console_task.c
