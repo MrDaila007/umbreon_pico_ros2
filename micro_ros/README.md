@@ -25,3 +25,24 @@ Changes from upstream:
     (no Tag_ABI_VFP_args => base AAPCS, i.e. softfp)
 
 Comparison against a real pico-sdk `pico2_w` object is deferred to Task 3.
+
+## Production resource gate (Plan 3)
+
+The production archive uses custom MTU1200 and capacity1 node/16 publishers/
+4 subscriptions/10 services/0 clients/history4. `make microros` builds in an
+ignored candidate directory, verifies generated headers, required type-support
+symbols and Cortex-M33 softfp ABI, then seals archive/header hashes in
+`libmicroros/contract-sha256.json` before replacing the installed library. A failed
+candidate leaves the previous artifact installed; rollback copies remain under
+`build_tmp/run.*/previous-libmicroros`.
+
+Firmware CMake runs `tools/check_microros.py` and stops with `run make microros`
+if the generated contract/manifest is missing, stale or mismatched. Hash sealing
+is build integrity evidence, not a substitute for runtime memory/rate checks.
+
+`make test` also runs the Python contract rejection tests. `make wire` runs actual
+ARM-generated telemetry serializers plus best-effort XRCE framing in QEMU
+(`qemu-system-arm`, machine `mps2-an505`, ARM GCC/newlib with rdimon specs needed).
+It accesses no hardware. The wire budget and measured packet sizes are in
+`docs/ros-interface.md`. Production lifecycle/RAM acceptance is completed as the
+network and ROS entities are implemented, not inferred from library rebuild alone.

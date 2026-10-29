@@ -1,4 +1,5 @@
 #!/bin/bash
+set -eo pipefail
 
 ######## Configure Raspberry Pi Pico SDK  ########
 
@@ -44,8 +45,11 @@ popd > /dev/null
 
 apt -y install rsync
 for var in ${INCLUDE_ROS2_PACKAGES}; do
-    rsync -r /project/libmicroros/include/${var}/${var}/* /project/libmicroros/include/${var}
-    rm -rf /project/libmicroros/include/${var}/${var}
+    # Some packages have no C headers; the current builder already flattens others.
+    if [ -d "/project/libmicroros/include/${var}/${var}" ]; then
+        rsync -r "/project/libmicroros/include/${var}/${var}/" "/project/libmicroros/include/${var}/"
+        rm -rf "/project/libmicroros/include/${var}/${var}"
+    fi
 done
 
 ######## Generate extra files ########

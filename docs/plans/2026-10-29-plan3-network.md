@@ -328,23 +328,26 @@ Do not write into the `umbreon_zephyr` reference project.
 
 ## Task 1: Lock resource and build contracts
 
+**Completed:** see `docs/validation/plan3-task1.md`; production runtime entity
+heap/stack acceptance remains in later tasks.
+
 **Files:** micro-ROS colcon metadata/build docs, firmware CMake, a build-contract
 check script, `docs/ros-interface.md` initial graph/budget.
 
-- [ ] Record baseline checks and actual library symbols/headers/package revisions.
-- [ ] Add `-DUCLIENT_CUSTOM_TRANSPORT_MTU=1200`, proposed RMW capacities above;
+- [x] Record baseline checks and actual library symbols/headers/package revisions.
+- [x] Add `-DUCLIENT_CUSTOM_TRANSPORT_MTU=1200`, proposed RMW capacities above;
   rebuild Jazzy library. Verify generated headers, linked symbols and Cortex-M33
   softfp ABI against SDK objects. Do not change the toolchain to hard-float.
-- [ ] Fix the literal `-UCLIENT_PROFILE_STREAM_FRAMING=ON` metadata typo to the
+- [x] Fix the literal `-UCLIENT_PROFILE_STREAM_FRAMING=ON` metadata typo to the
   intended `-DUCLIENT_PROFILE_STREAM_FRAMING=ON` if retained; custom UDP registration
   still uses `framing=false`. Check flags against the pinned dependency CMake.
-- [ ] Fail the firmware configure/build with a clear message if library/required
+- [x] Fail the firmware configure/build with a clear message if library/required
   message type support is missing or generated MTU/limits violate the contract.
-- [ ] Add a serialized-size test/measurement for worst-case Odometry and bounded
+- [x] Add a serialized-size test/measurement for worst-case Odometry and bounded
   diagnostics before selecting final MTU. Include actual XRCE overhead.
-- [ ] Run micro-ROS rebuild, firmware build, existing host tests/coverage; record
+- [x] Run micro-ROS rebuild, firmware build, existing host tests/coverage; record
   ELF data/bss, heap budget and artifact size. This is a resource gate.
-- [ ] Commit `build: configure micro-ROS resources for production telemetry`.
+- [x] Commit `build: configure micro-ROS resources for production telemetry`.
 
 ## Task 2: Close shared-state and control safety gaps
 

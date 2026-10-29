@@ -4,7 +4,7 @@ export GID := $(shell id -g)
 HOST_BUILD := build/host
 FW_BUILD := build/fw
 
-.PHONY: test coverage fw microros image
+.PHONY: test coverage fw microros image wire
 
 image:
 	docker compose -f docker/compose.yml build fw-build
@@ -20,12 +20,13 @@ test:
 	    n=$$((n+1)); echo "== $$t"; "$$t" || rc=1; \
 	  done; \
 	  [ $$n -gt 0 ] || { echo "no host tests found" >&2; exit 1; }; \
+	  python3 -B -m unittest discover -s tests/tools -v || rc=1; \
 	  exit $$rc'
 
 coverage: test
 	$(DC) bash -c 'if compgen -G "firmware/core/*.c" >/dev/null || compgen -G "firmware/drivers/*.c" >/dev/null; then \
 	  gcovr --root . --filter "firmware/(core|drivers)/.*\.c" --object-directory $(HOST_BUILD) \
-	    --txt --fail-under-line 80; \
+	    --txt --fail-under-line 80 $(HOST_BUILD); \
 	  else echo "coverage: no firmware/core|drivers/*.c yet, nothing to measure"; fi'
 
 fw:
@@ -37,3 +38,7 @@ fw:
 
 microros:
 	./micro_ros/build.sh
+
+# Runs real ARM serializers/framing on host QEMU; does not access the car.
+wire:
+	./tests/wire/run.sh

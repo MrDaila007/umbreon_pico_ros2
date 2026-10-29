@@ -11,6 +11,19 @@ pico_sdk_init()
 
 set(REPO_ROOT ${CMAKE_CURRENT_LIST_DIR}/..)
 
+# Fail before compilation if the generated archive is stale or lacks production types.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(MICROROS_DIR ${REPO_ROOT}/micro_ros/libmicroros CACHE PATH "Verified micro-ROS library")
+execute_process(
+    COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/tools/check_microros.py ${MICROROS_DIR}
+    RESULT_VARIABLE MICROROS_CONTRACT_RESULT
+    OUTPUT_VARIABLE MICROROS_CONTRACT_OUTPUT
+    ERROR_VARIABLE MICROROS_CONTRACT_ERROR)
+if(NOT MICROROS_CONTRACT_RESULT EQUAL 0)
+    message(FATAL_ERROR "${MICROROS_CONTRACT_ERROR}")
+endif()
+message(STATUS "${MICROROS_CONTRACT_OUTPUT}")
+
 # Build-time network defaults from the git-ignored config/secrets.cmake (optional).
 set(UMB_SSID "")
 set(UMB_PASS "")
