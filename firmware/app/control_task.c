@@ -26,21 +26,24 @@ typedef struct {
     bool have_cmd;
 } cmd_state_t;
 
-static umb_control_in_t gather_inputs(cmd_state_t *cs, uint32_t now_ms) {
+/* Reads the clock only after the command / beat snapshots, so neither can be
+ * stamped later than now_ms by core 0 in between. */
+static umb_control_in_t gather_inputs(cmd_state_t *cs) {
     umb_cmd_t fresh;
     if (shared_take_cmd(&fresh)) {
         cs->cmd = fresh;
         cs->have_cmd = true;
     }
+    uint32_t core0_beat_ms = shared_core0_beat_ms();
     umb_control_in_t in;
     memset(&in, 0, sizeof in);   /* Plan 1: every sensor *_present = false */
     in.cmd = cs->cmd;
-    in.safety.now_ms = now_ms;
+    in.safety.now_ms = hal_now_ms();
     in.safety.have_cmd = cs->have_cmd;
     in.safety.last_cmd_ms = cs->cmd.rx_ms;
     in.safety.source = cs->cmd.source;
     shared_get_link(&in.safety.wifi_up, &in.safety.agent_up);
-    in.safety.core0_beat_ms = shared_core0_beat_ms();
+    in.safety.core0_beat_ms = core0_beat_ms;
     in.tach_count = hal_tach_count();
     in.tach_age_us = hal_tach_age_us();
     return in;
@@ -62,7 +65,7 @@ void control_task(void *param) {
         int kind;
         while (shared_take_arm_request(&kind)) ctl.arming = apply_arm_request(ctl.arming, kind);
 
-        umb_control_in_t in = gather_inputs(&cs, hal_now_ms());
+        umb_control_in_t in = gather_inputs(&cs);
         umb_outputs_t out;
         ctl = umb_control_step(ctl, &in, &settings, &out);
         hal_pwm_write(out.servo_us, out.esc_us);

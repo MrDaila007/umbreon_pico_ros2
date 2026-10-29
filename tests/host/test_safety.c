@@ -43,6 +43,21 @@ TEST(test_safety_timeout_across_wrap) {
     ASSERT_EQ(umb_safety_evaluate(&in, &c) & UMB_STOP_CMD_TIMEOUT, 0u);
 }
 
+/* Core 0 may stamp a command / beat 1 ms after core 1 read its clock. */
+TEST(test_safety_future_cmd_stamp_is_fresh) {
+    umb_settings_t c = umb_settings_defaults();
+    umb_safety_in_t in = base_in();
+    in.last_cmd_ms = in.now_ms + 1u;
+    ASSERT_EQ(umb_safety_evaluate(&in, &c), 0u);
+}
+
+TEST(test_safety_future_core0_beat_is_fresh) {
+    umb_settings_t c = umb_settings_defaults();
+    umb_safety_in_t in = base_in();
+    in.core0_beat_ms = in.now_ms + 1u;
+    ASSERT_EQ(umb_safety_evaluate(&in, &c), 0u);
+}
+
 TEST(test_safety_link_only_for_ros_source) {
     umb_settings_t c = umb_settings_defaults();
     umb_safety_in_t in = base_in();
@@ -92,6 +107,8 @@ int main(void) {
     RUN_TEST(test_safety_all_clear);
     RUN_TEST(test_safety_timeout_boundary);
     RUN_TEST(test_safety_timeout_across_wrap);
+    RUN_TEST(test_safety_future_cmd_stamp_is_fresh);
+    RUN_TEST(test_safety_future_core0_beat_is_fresh);
     RUN_TEST(test_safety_link_only_for_ros_source);
     RUN_TEST(test_safety_core0_stale);
     RUN_TEST(test_safety_disarm_mask_excludes_timeout);

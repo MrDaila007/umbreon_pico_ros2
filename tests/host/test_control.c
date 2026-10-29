@@ -133,6 +133,22 @@ TEST(test_control_timeout_stops_without_disarm) {
     ASSERT_EQ(h.out.esc_us, umb_esc_us_from_throttle(0.5f, &h.c));
 }
 
+/* A command stamped by core 0 just after core 1 read the clock keeps driving. */
+TEST(test_control_future_cmd_stamp_keeps_driving) {
+    harness_t h; h_init(&h);
+    h_arm(&h);
+    h_raw(&h, 0.5f);
+    ASSERT_TRUE(h.out.esc_us > 1500);
+    umb_control_in_t in = h_input(&h, UMB_CMD_RAW, UMB_DRIVE_MANUAL, 0.0f, 0.5f, true);
+    in.cmd.rx_ms = h.now + 1u;
+    in.safety.last_cmd_ms = h.now + 1u;
+    h.s = umb_control_step(h.s, &in, &h.c, &h.out);
+    ASSERT_EQ(h.out.stop_mask, 0u);
+    ASSERT_TRUE(h.out.armed);
+    ASSERT_TRUE(h.out.motion_allowed);
+    ASSERT_EQ(h.out.esc_us, umb_esc_us_from_throttle(0.5f, &h.c));
+}
+
 TEST(test_control_stale_neutral_does_not_rearm_after_timeout) {
     harness_t h; h_init(&h);
     h_arm(&h);
@@ -376,6 +392,7 @@ int main(void) {
     RUN_TEST(test_control_raw_drive_after_arm_and_neutral);
     RUN_TEST(test_control_needs_neutral_after_arm);
     RUN_TEST(test_control_timeout_stops_without_disarm);
+    RUN_TEST(test_control_future_cmd_stamp_keeps_driving);
     RUN_TEST(test_control_stale_neutral_does_not_rearm_after_timeout);
     RUN_TEST(test_control_agent_loss_disarms);
     RUN_TEST(test_control_arming_mode_change_disarms);
