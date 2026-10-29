@@ -79,10 +79,15 @@ static umb_reflex_t stall_update(umb_reflex_t r, int offset_us, uint32_t tach_ag
     return r;
 }
 
+static bool imu_usable(const umb_sensor_in_t *s) {
+    return s->imu_present && s->imu_ok && isfinite(s->accel_g[0]) &&
+           isfinite(s->accel_g[1]) && isfinite(s->accel_g[2]);
+}
+
 static umb_reflex_t impact_update(umb_reflex_t r, const umb_sensor_in_t *s, uint32_t now_ms,
                                   const umb_settings_t *c, bool *detected) {
     *detected = false;
-    if (!(s->imu_present && s->imu_ok)) { r.upside_tracking = false; return r; }
+    if (!imu_usable(s)) { r.upside_tracking = false; return r; }
     float ax = s->accel_g[0], ay = s->accel_g[1], az = s->accel_g[2];
     bool hit = sqrtf(ax * ax + ay * ay + az * az) > c->impact_g;
     if (az < UPSIDE_Z_G) {
@@ -133,7 +138,7 @@ umb_reflex_t umb_reflex_step(umb_reflex_t r, umb_drive_mode_t mode, const umb_se
     else r = impact_update(r, sens, now_ms, c, &det[UMB_REFLEX_IMPACT]);
 
     tof_fault = sens->tof_present && (sens->tof_online < TOF_COUNT || sens->tof_recovering);
-    det[UMB_REFLEX_SENSOR_FAULT] = tof_fault || (sens->imu_present && !sens->imu_ok);
+    det[UMB_REFLEX_SENSOR_FAULT] = tof_fault || (sens->imu_present && !imu_usable(sens));
 
     for (int i = 0; i < UMB_REFLEX_COUNT; i++) {
         if (act[i] == UMB_RX_OFF || !det[i]) continue;

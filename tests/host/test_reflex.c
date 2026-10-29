@@ -337,6 +337,21 @@ TEST(test_reflex_nan_speed_still_blocks) {
     ASSERT_FALSE(o.block_forward);
 }
 
+TEST(test_reflex_nan_accel_is_imu_fault) {
+    umb_settings_t c = umb_settings_defaults();
+    const float bad[2] = { NAN, INFINITY };
+    for (int i = 0; i < 2; i++) {
+        umb_sensor_in_t s = no_sens();
+        s.imu_present = true; s.imu_ok = true;
+        s.accel_g[0] = bad[i]; s.accel_g[2] = 1.0f;
+        umb_reflex_out_t o = step1(UMB_DRIVE_AUTO, &s, 0.0f, &c);
+        ASSERT_TRUE(o.detected_mask & BIT(UMB_REFLEX_SENSOR_FAULT));
+        ASSERT_EQ(o.detected_mask & BIT(UMB_REFLEX_IMPACT), 0u);
+        ASSERT_FALSE(o.stop);
+        ASSERT_FALSE(o.disarm);
+    }
+}
+
 int main(void) {
     RUN_TEST(test_reflex_nothing_present_no_effect);
     RUN_TEST(test_reflex_collision_auto_brakes);
@@ -363,5 +378,6 @@ int main(void) {
     RUN_TEST(test_reflex_off_not_evaluated);
     RUN_TEST(test_reflex_stop_disarm_ored_and_state_mask);
     RUN_TEST(test_reflex_names);
+    RUN_TEST(test_reflex_nan_accel_is_imu_fault);
     TEST_SUMMARY();
 }
