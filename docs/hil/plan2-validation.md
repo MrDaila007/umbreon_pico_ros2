@@ -54,3 +54,12 @@ Remaining Task 10 acceptance: flash the current image and capture `status`,
 calibration, capture `sensors` and `status` again. ESC must remain 1500 us. If the
 board is disconnected from car sensors, record offline/uncalibrated readings.
 The wider owner-run checks are in `plan2-sensor-checklist.md`.
+
+### Connected-board follow-up
+
+The owner confirmed the board is connected. Read-only sysfs inspection confirms
+USB device `1-1.2`, VID:PID `2e8a:0009`, product `Pico`, and the associated
+`/sys/class/tty/ttyACM0`. The board is present on the host. However, this session's
+isolated `/dev` does not expose `/dev/ttyACM0` or `/dev/bus/usb`; `picotool info`
+fails to initialize libUSB. Hardware smoke remains pending because device access
+is unavailable in this execution environment. No flash or serial command was sent.
