@@ -9,9 +9,11 @@
 #define ENC_CLK_GPIO 22u
 #define ENC_DT_GPIO 12u
 #define ENC_BTN_GPIO 19u
-#define ENC_PERIOD_MS 1
+#define ENC_PERIOD_US 1000
+#define ENC_POOL_MAX_TIMERS 2
 
 static repeating_timer_t s_timer;
+static alarm_pool_t *s_pool;
 static umb_encoder_t s_enc;
 static spin_lock_t *s_lock;
 static volatile uint8_t s_events;
@@ -40,7 +42,7 @@ static bool timer_cb(repeating_timer_t *rt) {
     return true;
 }
 
-void hal_encoder_init(void) {
+bool hal_encoder_init(void) {
     pin_in(ENC_CLK_GPIO);
     pin_in(ENC_DT_GPIO);
     pin_in(ENC_BTN_GPIO);
@@ -49,8 +51,13 @@ void hal_encoder_init(void) {
     s_rotation = 0;
     s_enc = umb_encoder_init(gpio_get(ENC_CLK_GPIO), gpio_get(ENC_DT_GPIO), !gpio_get(ENC_BTN_GPIO),
                              to_ms_since_boot(get_absolute_time()));
+    /* The default alarm pool is global and lives on core 0. A dedicated pool created here binds
+     * its IRQ to the calling core (core 1). It claims the first unused hardware alarm of the
+     * timer (the default pool holds alarm 3; FreeRTOS uses SysTick, not an alarm). */
+    s_pool = alarm_pool_create_with_unused_hardware_alarm(ENC_POOL_MAX_TIMERS);
+    if (s_pool == NULL) return false;
     /* Negative delay: period measured start-to-start, no drift. */
-    add_repeating_timer_ms(-ENC_PERIOD_MS, timer_cb, NULL, &s_timer);
+    return alarm_pool_add_repeating_timer_us(s_pool, -ENC_PERIOD_US, timer_cb, NULL, &s_timer);
 }
 
 uint8_t hal_encoder_take(int *rotation) {
