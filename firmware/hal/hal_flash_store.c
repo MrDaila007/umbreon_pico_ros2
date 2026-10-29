@@ -5,14 +5,23 @@
 #include "pico/error.h"
 #include "pico/flash.h"
 #include "pico/platform.h"
+#include "pico/time.h"
+#include "hardware/watchdog.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "control_task.h"
 
 #define SLOT0_OFFSET (PICO_FLASH_SIZE_BYTES - 2u * FLASH_SECTOR_SIZE)
 #define FLASH_LOCKOUT_TIMEOUT_MS 100u
+/* Covers a worst-case 4 KiB sector erase (~400 ms for typical QSPI NOR) plus
+ * program, lockout entry/exit and margin. Applies only around one write. */
+#define FLASH_WATCHDOG_MS 2000u
 
 _Static_assert(UMB_SETTINGS_SLOT_SIZE == FLASH_SECTOR_SIZE, "one slot per flash sector");
 
 static int s_slot = -1;        /* newest valid slot, -1 = defaults */
 static uint32_t s_seq;
+static uint32_t s_last_write_ms;
 static uint8_t s_buf[UMB_SETTINGS_SLOT_SIZE] __attribute__((aligned(4)));
 
 typedef struct {
@@ -50,8 +59,22 @@ bool hal_settings_save(const umb_settings_t *s) {
 
     write_job_t job = { slot_offset(target), s_buf };
     /* Caller holds the maintenance reservation and has the control task's neutral
-     * ACK after its watchdog feed. Never feed the watchdog from the flash path. */
-    if (flash_safe_execute(write_sector, &job, FLASH_LOCKOUT_TIMEOUT_MS) != PICO_OK) return false;
+     * ACK after its watchdog feed. flash_safe_execute parks core 1 (the control
+     * task, sole routine watchdog feeder) with interrupts off for the whole erase +
+     * program, which can exceed the 250 ms control watchdog. So, only around this
+     * write: re-arm the watchdog with a longer timeout. The SDK keeps one shared
+     * reload value that core 1's watchdog_update() also reads, so wait one control
+     * period: a feed that raced with the old value is superseded by control's own
+     * feed of the extended value (we never feed on its behalf). Afterwards restore
+     * the normal timeout; control's next feed reloads 250 ms. Outputs are neutral
+     * and disarmed throughout (maintenance), so the longer window cannot hide motion. */
+    watchdog_enable(FLASH_WATCHDOG_MS, true);
+    vTaskDelay(pdMS_TO_TICKS(CONTROL_PERIOD_MS + 5u));
+    absolute_time_t start = get_absolute_time();
+    int rc = flash_safe_execute(write_sector, &job, FLASH_LOCKOUT_TIMEOUT_MS);
+    s_last_write_ms = (uint32_t)(absolute_time_diff_us(start, get_absolute_time()) / 1000);
+    watchdog_enable(CONTROL_WATCHDOG_MS, true);
+    if (rc != PICO_OK) return false;
 
     umb_settings_t check;
     uint32_t check_seq = 0;
@@ -70,4 +93,8 @@ int hal_settings_slot(void) {
 
 uint32_t hal_settings_seq(void) {
     return s_seq;
+}
+
+uint32_t hal_settings_last_write_ms(void) {
+    return s_last_write_ms;
 }
