@@ -65,6 +65,8 @@ void shared_get_arming(umb_arming_t *out);
 
 /* Network callbacks must carry the generation of their ready session. */
 uint32_t shared_session_generation(void);
+/* Atomic: generation is nonzero, current, and WiFi + agent are both up. */
+bool shared_session_ready(uint32_t generation);
 bool shared_post_ros_cmd(const umb_cmd_t *cmd, uint32_t generation);
 void shared_notify_network_loss(uint32_t reason_mask);
 
@@ -81,6 +83,7 @@ bool shared_begin_maintenance(uint32_t *id);
 void shared_ack_maintenance(uint32_t id);
 bool shared_maintenance_acknowledged(uint32_t id);
 void shared_end_maintenance(uint32_t id);
+bool shared_maintenance_active(void); /* any reservation held (non-consuming read) */
 
 #define SHARED_ARM_QUEUE_LEN 8u
 typedef struct {

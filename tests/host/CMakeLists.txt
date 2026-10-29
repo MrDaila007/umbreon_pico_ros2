@@ -116,3 +116,12 @@ target_include_directories(test_ros_commands PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/task_stubs
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)
+
+# /umbreon/arm handler logic: real shared state, fake clock, simulated control tick.
+target_sources(test_ros_services PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/ros_services.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/shared_state.c)
+target_include_directories(test_ros_services PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/task_stubs
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)

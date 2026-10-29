@@ -247,6 +247,14 @@ uint32_t shared_session_generation(void) {
     return generation;
 }
 
+bool shared_session_ready(uint32_t generation) {
+    uint32_t irq = lock();
+    bool ready = generation != 0 && generation == s_shared.session_generation &&
+                 s_shared.wifi_up && s_shared.agent_up;
+    unlock(irq);
+    return ready;
+}
+
 void shared_set_link(bool wifi_up, bool agent_up) {
     uint32_t irq = lock();
     uint32_t loss = 0;
@@ -465,6 +473,13 @@ bool shared_maintenance_acknowledged(uint32_t id) {
     bool ack = s_shared.maintenance && s_shared.maintenance_id == id && s_shared.maintenance_ack;
     unlock(irq);
     return ack;
+}
+
+bool shared_maintenance_active(void) {
+    uint32_t irq = lock();
+    bool active = s_shared.maintenance;
+    unlock(irq);
+    return active;
 }
 
 void shared_end_maintenance(uint32_t id) {

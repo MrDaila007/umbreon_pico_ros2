@@ -480,27 +480,27 @@ main/task pinning, allocator tests.
 
 ## Task 7: Command mapping and acknowledged arming
 
-**In progress:** mapping/mailbox adapter verified in
-`docs/validation/plan3-task7-commands.md`; service ACK handler and entity binding
-remain open.
+**Done (host logic):** mapping, callback adapter and `/umbreon/arm` ACK handler
+verified in `docs/validation/plan3-task7-commands.md`. Binding them to live rcl
+subscriptions/service and the production clock is Task 9.
 
 **Files:** umb_ros_command, ros_services arm handler, control/shared ACK tests.
 
 - [x] Pure tests cover all three topic mappings, signed reverse, zero
   command, steering clamp, NaN/Inf, unsupported axes and no mailbox write on reject.
-- [ ] ROS callbacks stamp receive time locally and post only for the current ready
+- [x] ROS callbacks stamp receive time locally and post only for the current ready
   generation. History depth1; no replay of cached commands during lifecycle setup.
   Document that Twist has no sender timestamp: keep-last cannot independently
   identify every delayed network packet; it is not an authenticated/freshness
   protocol. No auto-resume because disarm/neutral latch remain mandatory.
-- [ ] Arm(true) refuses a dead/stale session or active maintenance. Queue accepted
+- [x] Arm(true) refuses a dead/stale session or active maintenance. Queue accepted
   requests with IDs and wait for actual control completion with a <=60 ms bound;
   control runs independently. Message differentiates `waiting for car arm`,
   `waiting for ros arm`, armed, refused mode and busy/timeout.
-- [ ] Timeout/cancellation cannot leave a supposedly failed arm request queued to
+- [x] Timeout/cancellation cannot leave a supposedly failed arm request queued to
   arm later. Tests include request timing out just before a control tick and
   generation change while waiting. Disarm(false) has priority and clears both keys.
-- [ ] Host tests/coverage + firmware compile; commit
+- [x] Host tests/coverage + firmware compile; commit
   `feat: ROS command mapping and control-acknowledged arming`.
 
 ## Task 8: Pure telemetry, timestamp mapping and odometry

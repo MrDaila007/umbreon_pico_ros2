@@ -46,9 +46,18 @@ TEST(test_ros_latest_callback_and_console_share_explicit_mailbox) {
     now=22;t.linear[0]=0;ASSERT_TRUE(ros_commands_post(UMB_ROS_CMD_TELEOP,&t,gen));
     shared_take_control_mailbox(&box);ASSERT_EQ(box.cmd.source,UMB_SRC_ROS);ASSERT_EQ(box.cmd.mode,UMB_DRIVE_MANUAL);
 }
+TEST(test_ros_setup_generation_zero_never_posts) {
+    /* Callbacks bound during lifecycle setup carry generation 0 until the session
+     * is declared ready, so a sample cached during setup cannot be replayed. */
+    ready();umb_twist_fields_t t={.linear={0.3,0,0}};
+    ASSERT_FALSE(ros_commands_post(UMB_ROS_CMD_VEL,&t,ROS_COMMANDS_SETUP_GENERATION));
+    shared_control_mailbox_t box;shared_take_control_mailbox(&box);ASSERT_FALSE(box.cmd_pending);
+    ASSERT_EQ(ROS_COMMANDS_HISTORY_DEPTH,1);
+}
 int main(void) {
     RUN_TEST(test_ros_rejected_command_does_not_refresh_mailbox);
     RUN_TEST(test_ros_session_generation_and_maintenance_reject);
     RUN_TEST(test_ros_latest_callback_and_console_share_explicit_mailbox);
+    RUN_TEST(test_ros_setup_generation_zero_never_posts);
     TEST_SUMMARY();
 }
