@@ -491,5 +491,5 @@ Each item gives the exact console input and the expected observation, using the 
   - The same with `speed 0 0.4 3000` (manual) → only `detected`; the wheels keep turning.
 - [ ] Speed cap: in auto, a hand at ≈ 650 mm → `status` speed target capped ≈ 0.6 m/s.
 
-- [ ] **Step 1:** Write the checklist from the real console output format.
-- [ ] **Step 2:** Commit `docs: plan 2 sensor and reflex bench checklist`.
+- [x] **Step 1:** Write the checklist from the real console output format. Owner-run hardware observations remain unrecorded.
+- [x] **Step 2:** Commit `docs: plan 2 sensor and reflex bench checklist`.
