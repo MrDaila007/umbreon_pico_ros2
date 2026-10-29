@@ -23,10 +23,10 @@ test:
 	  exit $$rc'
 
 coverage: test
-	$(DC) bash -c 'if ls firmware/core/*.c >/dev/null 2>&1; then \
-	  gcovr --root . --filter "firmware/core/.*\.c" --object-directory $(HOST_BUILD) \
+	$(DC) bash -c 'if compgen -G "firmware/core/*.c" >/dev/null || compgen -G "firmware/drivers/*.c" >/dev/null; then \
+	  gcovr --root . --filter "firmware/(core|drivers)/.*\.c" --object-directory $(HOST_BUILD) \
 	    --txt --fail-under-line 80; \
-	  else echo "coverage: no firmware/core/*.c yet, nothing to measure"; fi'
+	  else echo "coverage: no firmware/core|drivers/*.c yet, nothing to measure"; fi'
 
 fw:
 	$(DC) bash -c 'set -e; \
