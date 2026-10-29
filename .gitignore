@@ -1,0 +1,6 @@
+build/
+config/secrets.cmake
+micro_ros/libmicroros/
+micro_ros/build_tmp/
+*.uf2
+.superpowers/
