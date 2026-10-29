@@ -72,3 +72,17 @@ target_include_directories(test_settings_apply PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/task_stubs
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)
+
+# Build the production datagram adapter against fake socket functions on the host.
+target_sources(test_udp_transport PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal/hal_udp_transport.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal/hal_udp_probe.c)
+target_include_directories(test_udp_transport PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../net/stubs
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)
+
+# Production DHCP RAW wrapper under fake lwIP lock/PCB/pbuf operations.
+target_sources(test_dhcp_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal/hal_dhcp_server.c)
+target_include_directories(test_dhcp_server PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../net/stubs
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)

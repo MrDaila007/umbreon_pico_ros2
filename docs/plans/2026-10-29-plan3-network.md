@@ -401,28 +401,31 @@ flash HAL and their host integration tests.
 
 ## Task 4: Production UDP, WiFi and DHCP adapters
 
+**Completed in software:** see `docs/validation/plan3-task4.md`; actual radio,
+DHCP client interoperability and discovery remain Task13/owner HIL checks.
+
 **Files:** hal_wifi, hal_udp_transport, hal_dhcp_server, lwipopts, tests/net.
 
-- [ ] Use spike UDP code as reference, not a blind copy. Test with fake socket
+- [x] Use spike UDP code as reference, not a blind copy. Test with fake socket
   operations: open/bind/close failures; duplicate close; short/error send; timeout
   zero uses nonblocking read; positive timeout obeyed; setsockopt errors handled;
   oversized/truncated packet rejected rather than delivered as valid XRCE bytes.
-- [ ] A session endpoint is a fixed IP+port; reject datagrams from a different
+- [x] A session endpoint is a fixed IP+port; reject datagrams from a different
   source, maintaining the original read deadline under unrelated packets.
   Endpoint discovery uses a separate bounded probe context and validates XRCE
   ping replies; it must not retarget a live session on arbitrary traffic.
-- [ ] STA join starts asynchronously. Initialize CYW43 from the core-0 task,
+- [x] STA join starts asynchronously. Initialize CYW43 from the core-0 task,
   disable power save after join, collect link/IP/RSSI via supported locking.
-- [ ] Port DHCP from the SDK example, preserving license and pinned source credit.
+- [x] Port DHCP from the SDK example, preserving license and pinned source credit.
   Protect all RAW API operations with tcpip-thread execution/core-lock as required
   by NO_SYS=0; callback copies bounded lease metadata only, never calls rcl.
-- [ ] Harden DHCP packet/option bounds, PAD/END handling and chained pbuf reads;
+- [x] Harden DHCP packet/option bounds, PAD/END handling and chained pbuf reads;
   malformed requests cannot read outside the packet. Test offer/ACK and expiry,
   lease replacement, truncated options and repeated requests without heap growth.
-- [ ] AP is 192.168.4.1/24; choose a bounded lease pool beginning at .2, record
+- [x] AP is 192.168.4.1/24; choose a bounded lease pool beginning at .2, record
   candidate IPs in lease order and retry candidates fairly. Do not advertise a
   DNS server unless one is actually implemented. No captive portal required.
-- [ ] Prove closing/reopening WiFi modes releases DHCP PCBs/sockets and clears old
+- [x] Prove closing/reopening WiFi modes releases DHCP PCBs/sockets and clears old
   endpoint candidates. Run adapter tests and firmware compile; commit
   `feat: bounded CYW43 UDP transport and AP DHCP adapter`.
 

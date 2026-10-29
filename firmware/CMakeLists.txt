@@ -69,6 +69,10 @@ set(FW_SRCS
     hal/hal_tach.c
     hal/hal_flash_store.c
     hal/hal_time.c
+    hal/hal_wifi.c
+    hal/hal_dhcp_server.c
+    hal/hal_udp_probe.c
+    hal/hal_udp_transport.c
     hal/hal_i2c.c
     hal/hal_gpio_misc.c
     hal/hal_adc.c
@@ -92,7 +96,8 @@ target_include_directories(umbreon_pico_ros2 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/core
     ${CMAKE_CURRENT_LIST_DIR}/drivers
     ${CMAKE_CURRENT_LIST_DIR}/hal
-    ${CMAKE_CURRENT_LIST_DIR}/app)
+    ${CMAKE_CURRENT_LIST_DIR}/app
+    ${MICROROS_DIR}/include)
 target_compile_definitions(umbreon_pico_ros2 PRIVATE
     UMB_DEFAULT_WIFI_SSID="${UMB_SSID}"
     UMB_DEFAULT_WIFI_PASS="${UMB_PASS}"
@@ -105,6 +110,7 @@ target_compile_definitions(umbreon_pico_ros2 PRIVATE
     PICO_STDIO_USB_STDOUT_TIMEOUT_US=30000)  # a stalled terminal must not block core 0 for 500 ms (UMB_STOP_CORE0)
 target_link_libraries(umbreon_pico_ros2
     pico_stdlib
+    pico_cyw43_arch_lwip_sys_freertos
     pico_flash
     hardware_pwm
     hardware_i2c
