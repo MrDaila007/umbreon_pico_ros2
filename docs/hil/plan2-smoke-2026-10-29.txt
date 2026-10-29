@@ -1,0 +1,61 @@
+Plan 2 Task 10 hardware smoke
+Recorded UTC: 2026-10-29T18:14:29.122586+00:00
+Firmware implementation commit: ae23834
+UF2: build/fw-native/umbreon_pico_ros2.uf2
+UF2 SHA256: 8b962c1bb812c6e05650856a2b768c68cf44775d1e861b2a7d7f99313a74cb68
+Flash: owner provided successful picotool load -x -f transcript in conversation.
+Console: agent opened /dev/ttyACM0 using approved require_escalated execution.
+Guard: fresh status must confirm armed no, motion no, ESC 1500 us, |speed| < 0.05 m/s before cal imu.
+No arm, motion, mode, save, or settings-edit commands sent.
+Reported PWM values only; no external pulse measurement. Audio not observed.
+Calibration request accepted; post-request calibrated yes does not independently prove a newly accepted bias because rejected recalibration preserves prior calibration.
+
+>>> status
+status
+outputs: servo 1500 us, esc 1500 us, motion no, speed 0.00 m/s
+armed: no (mode both, car key no, ros key no, neutral seen no)
+stop: no_cmd
+gear: neutral, drive mode: manual
+reflex: detected speed_cap, intervening none
+settings: defaults
+link: wifi down, agent down
+encoder: ok
+reset: power-on / reset pin / debugger
+
+>>> sensors
+sensors
+tof mm: HR 448 FR 398 R 749 L 832 FL 1041 HL 147
+tof: online 6/6, recovering no, restarts 0
+accel g: -0.112 0.011 1.012
+gyro dps: -0.55 0.35 1.39
+yaw rate: -0.00 dps, heading: -1.4 deg
+imu: ok yes, calibrated yes
+battery: 7.46 V (min 7.31 V)
+stack free (words): control 1660 console 1540 imu 736 tof 690 ui 896
+
+>>> cal imu
+cal imu
+ok: calibrating, keep still
+
+>>> sensors
+sensors
+tof mm: HR 427 FR 380 R 750 L 736 FL 1009 HL 151
+tof: online 6/6, recovering no, restarts 0
+accel g: -0.100 0.034 1.015
+gyro dps: -1.50 -0.09 1.45
+yaw rate: -0.22 dps, heading: -1.4 deg
+imu: ok yes, calibrated yes
+battery: 7.46 V (min 7.31 V)
+stack free (words): control 1660 console 1540 imu 736 tof 690 ui 896
+
+>>> status
+status
+outputs: servo 1500 us, esc 1500 us, motion no, speed 0.00 m/s
+armed: no (mode both, car key no, ros key no, neutral seen no)
+stop: no_cmd
+gear: neutral, drive mode: manual
+reflex: detected speed_cap, intervening none
+settings: defaults
+link: wifi down, agent down
+encoder: ok
+reset: power-on / reset pin / debugger

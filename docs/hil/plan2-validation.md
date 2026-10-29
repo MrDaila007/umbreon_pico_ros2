@@ -1,5 +1,9 @@
 # Plan 2 Task 10 validation — 2026-10-29
 
+**Current status:** native software checks and disarmed hardware console smoke
+completed. Initial device-access limitations below are historical; the approved
+console run is recorded in the final section. Wider owner checklist is pending.
+
 Resumed from Task 9 commit `e6dc74f` on `plan2-drivers`. The interrupted Task 10
 implementation was present in the working tree; it has been reviewed and finished.
 
@@ -42,7 +46,7 @@ The native build used the SDK at `/home/user/.pico-sdk/sdk/2.2.0` and FreeRTOS a
 These local paths are verification context, not a replacement for the repository's
 Docker build. Rebuild with `make fw` in the normal environment.
 
-## Hardware smoke status
+## Initial hardware access limitation (resolved below)
 
 **Not executed in this resumed session.** No `/dev/ttyACM*` or USB serial-by-id
 port was visible; `lsusb` could not initialize libusb in this environment. No flash,
@@ -63,3 +67,47 @@ USB device `1-1.2`, VID:PID `2e8a:0009`, product `Pico`, and the associated
 isolated `/dev` does not expose `/dev/ttyACM0` or `/dev/bus/usb`; `picotool info`
 fails to initialize libUSB. Hardware smoke remains pending because device access
 is unavailable in this execution environment. No flash or serial command was sent.
+
+## Hardware smoke completed after device access approval
+
+The owner flashed `build/fw-native/umbreon_pico_ros2.uf2` successfully and supplied
+initial `status`/`sensors` output. After the execution policy changed to permit
+reviewed escalation, the agent opened `/dev/ttyACM0` with approved
+`require_escalated` access and executed only:
+
+```text
+status
+sensors
+cal imu
+sensors
+status
+```
+
+A fresh status check gated the calibration: disarmed, motion disabled, ESC neutral,
+finite absolute speed below 0.05 m/s. The final state also passed the neutral and
+disarmed checks. Full console transcript and UF2 hash are recorded in
+`plan2-smoke-2026-10-29.txt`.
+
+Observed:
+
+- Before and after: servo 1500 us, ESC 1500 us, motion no, speed 0.00 m/s;
+  armed no, BOTH mode, both keys no. These are firmware-reported values,
+  not external pulse measurements.
+- All six ToF online, recovering no, restarts 0; distances change between reads.
+- IMU ok yes, calibrated yes; acceleration approximately (-0.10, +0.03, +1.02) g
+  after calibration request. `cal imu` replied `ok: calibrating, keep still`.
+  Post-request yaw rate -0.22 dps, heading -1.4 degrees.
+- Battery 7.46 V, observed minimum 7.31 V; voltage accuracy has not been compared
+  against a multimeter.
+- Encoder ok. Minimum free stack reported (words): control 1660, console 1540,
+  IMU 736, ToF 690, UI 896.
+- Manual `speed_cap` detected, with no reflex intervention. WiFi and agent down
+  are expected in Plan 2.
+
+The calibration command was accepted and the IMU remained calibrated afterward.
+The console does not expose the last calibration outcome; a rejected recalibration
+preserves the old bias/flag, so this transcript alone does not prove a new bias
+was accepted. BOOT/CAL_DONE audio was not observed by the agent. Sensor accuracy,
+physical encoder gestures, disconnect/recovery and motion/reflex tests remain
+owner-run checklist items. No arm, motion, mode change, settings edit or save was
+performed by the agent.

@@ -409,7 +409,8 @@ docs/hil/          plan2-sensor-checklist.md
 ### Task 10: Sensor and UI tasks, wiring into control, console
 
 **Resume status (2026-10-29):** implementation and native validation complete;
-hardware smoke remains pending because this session has no accessible board.
+owner flashed the image and agent completed disarmed status/sensors/calibration-request
+smoke using approved device access. Physical/audio owner checklist remains pending.
 See `docs/hil/plan2-validation.md` for actual checks and limitations. Added an
 internal `tof_online_mask` to the snapshot so readers can expire individual stale
 slots without counting fresh out-of-range readings as offline.
@@ -459,11 +460,11 @@ slots without counting fresh out-of-range readings as offline.
 - [ ] **Step 1:** Write the parser test, run it to see it fail, extend `umb_console_parse`, run it to see it pass.
 - [x] **Step 2:** Implement the shared snapshot, the tasks, the control wiring and the console handlers.
 - [x] **Step 3:** Validate firmware, tests and coverage. Docker access blocked; native equivalents pass: ELF/UF2, 280 tests, 99.38% core/driver line coverage; see validation report.
-- [ ] **Step 4: Hardware smoke**, within the hardware rule:
+- [x] **Step 4: Hardware smoke**, within the hardware rule (owner flash + agent disarmed console test; transcript `docs/hil/plan2-smoke-2026-10-29.txt`; audio not verified):
   - Flash, then run `status`, `sensors` and `cal imu` while disarmed.
   - Record the transcript. If the board is not in the car, sensors show offline; record that, it is not a failure.
   - Expected: the BOOT melody plays if a buzzer is fitted, `status` stays disarmed, and the ESC stays at 1500.
-- [x] **Step 5:** Commit `feat: sensor and UI tasks feed reflexes and shared sensor snapshot`. Hardware acceptance remains separate and pending.
+- [x] **Step 5:** Commit `feat: sensor and UI tasks feed reflexes and shared sensor snapshot`. Disarmed console smoke recorded; wider owner checklist remains pending.
 
 ### Task 11: Owner checklist for sensors, reflexes, buzzer and encoder
 
