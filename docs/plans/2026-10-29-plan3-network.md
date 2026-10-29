@@ -455,6 +455,9 @@ main/task pinning, allocator tests.
 
 ## Task 6: WiFi mode orchestration and endpoint selection
 
+**In progress:** pure endpoint selection is verified in
+`docs/validation/plan3-task6-endpoints.md`; orchestration/provisioning remain open.
+
 **Files:** net_task WiFi stages, settings_apply provisioning, shared_network.
 
 - [ ] Connect the pure FSM to adapters. Offline operation still gives bounded
