@@ -92,7 +92,9 @@ static void print_help(void) {
            "  get <key> | set <key> <value> | defaults | save\n"
            "  wifi set <ssid> <pass> | agent set <ip|discover> <port>\n"
            "  reboot\n"
-           "settings edits and save are refused while armed; [ms] defaults to 1000, max 3000\n");
+           "set/defaults/wifi/agent/save are refused while driving (motion allowed, no stop);\n"
+           "save is also refused while armed; mode is always allowed (it disarms)\n"
+           "[ms] defaults to 1000, max 3000\n");
 }
 
 static umb_cmd_t neutral_cmd(uint32_t now_ms) {
@@ -134,9 +136,17 @@ static void arm_request(int kind) {
            yes_no(o.armed), yes_no(a.car_key), yes_no(a.ros_key));
 }
 
-/* Applies up to two key=value edits to a copy of the settings and publishes it. */
-static void edit_settings(const char *k1, const char *v1, const char *k2, const char *v2) {
-    if (!shared_settings_write_allowed()) { printf("refused: armed\n"); return; }
+/* True while a fresh command stream is being obeyed (no stop bit, motion allowed). */
+static bool driving(void) {
+    umb_outputs_t o;
+    shared_get_outputs(&o);
+    return o.motion_allowed && o.stop_mask == 0u;
+}
+
+/* Applies up to two key=value edits to a copy of the settings and publishes it.
+ * gated: refuse while driving (every edit except `mode`, which always disarms). */
+static void edit_settings(bool gated, const char *k1, const char *v1, const char *k2, const char *v2) {
+    if (gated && driving()) { printf("refused: driving\n"); return; }
     umb_settings_t s;
     shared_get_settings(&s);
     if (!umb_settings_set_kv(&s, k1, v1, &s) || (k2 && !umb_settings_set_kv(&s, k2, v2, &s))) {
@@ -156,13 +166,14 @@ static void get_setting(const char *key) {
 }
 
 static void restore_defaults(void) {
-    if (!shared_settings_write_allowed()) { printf("refused: armed\n"); return; }
+    if (driving()) { printf("refused: driving\n"); return; }
     umb_settings_t d = umb_settings_defaults();
     shared_set_settings(&d);
     printf("ok: defaults loaded (not saved; run save)\n");
 }
 
 static void save_settings(void) {
+    if (driving()) { printf("refused: driving\n"); return; }
     if (!shared_settings_write_allowed()) { printf("refused: armed\n"); return; }
     umb_settings_t s;
     shared_get_settings(&s);
@@ -191,14 +202,14 @@ void console_execute(const char *line, console_repeat_t *rep, uint32_t now_ms) {
     case UMB_CC_ARM_CAR:   arm_request(SHARED_ARM_CAR); break;
     case UMB_CC_ARM_ROS:   arm_request(SHARED_ARM_ROS); break;
     case UMB_CC_DISARM:    rep->active = false; arm_request(SHARED_ARM_DISARM); break;
-    case UMB_CC_MODE:      edit_settings("arming_mode", arm_mode_name(cc.mode), NULL, NULL); break;
+    case UMB_CC_MODE:      edit_settings(false, "arming_mode", arm_mode_name(cc.mode), NULL, NULL); break;
     case UMB_CC_GET:       get_setting(cc.key); break;
-    case UMB_CC_SET:       edit_settings(cc.key, cc.arg1, NULL, NULL); break;
+    case UMB_CC_SET:       edit_settings(true, cc.key, cc.arg1, NULL, NULL); break;
     case UMB_CC_SAVE:      save_settings(); break;
     case UMB_CC_DEFAULTS:  restore_defaults(); break;
     case UMB_CC_REBOOT:    reboot_now(); break;
-    case UMB_CC_WIFI_SET:  edit_settings("wifi_ssid", cc.arg1, "wifi_pass", cc.arg2); break;
-    case UMB_CC_AGENT_SET: edit_settings("agent_ip", cc.arg1, "agent_port", cc.arg2); break;
+    case UMB_CC_WIFI_SET:  edit_settings(true, "wifi_ssid", cc.arg1, "wifi_pass", cc.arg2); break;
+    case UMB_CC_AGENT_SET: edit_settings(true, "agent_ip", cc.arg1, "agent_port", cc.arg2); break;
     default:               printf("error: invalid command (try help)\n"); break;
     }
 }
