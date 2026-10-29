@@ -14,6 +14,7 @@ file(GLOB TEST_SRCS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/test_*.c)
 if(CORE_SRCS)
   add_library(core STATIC ${CORE_SRCS})
   target_include_directories(core PUBLIC ${CORE_DIR})
+  target_link_libraries(core PUBLIC m)
 endif()
 
 enable_testing()
