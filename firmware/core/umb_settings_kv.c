@@ -118,6 +118,47 @@ static const field_t *find_field(const char *key)
     return NULL;
 }
 
+static size_t field_bytes(const field_t *f)
+{
+    if (f->kind == K_STR) return f->size;
+    if (is_float(f->kind)) return sizeof(float);
+    return int_size(f->kind);
+}
+
+/* Field-wise equality; struct padding bytes never take part. */
+bool umb_settings_equal(const umb_settings_t *a, const umb_settings_t *b)
+{
+    for (size_t i = 0; i < N_FIELDS; i++) {
+        const field_t *f = &FIELDS[i];
+        const uint8_t *pa = (const uint8_t *)a + f->off;
+        const uint8_t *pb = (const uint8_t *)b + f->off;
+        if (f->kind == K_STR) {
+            if (strncmp((const char *)pa, (const char *)pb, f->size) != 0) return false;
+        } else if (memcmp(pa, pb, field_bytes(f)) != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* Copy of s with zeroed padding and zeroed string tails (deterministic bytes). */
+umb_settings_t umb_settings_canonical(const umb_settings_t *s)
+{
+    umb_settings_t c;
+    memset(&c, 0, sizeof c);
+    for (size_t i = 0; i < N_FIELDS; i++) {
+        const field_t *f = &FIELDS[i];
+        size_t n = field_bytes(f);
+        if (f->kind == K_STR) {
+            const char *str = (const char *)s + f->off;
+            n = 0;
+            while (n < (size_t)f->size - 1 && str[n]) n++;
+        }
+        memcpy((uint8_t *)&c + f->off, (const uint8_t *)s + f->off, n);
+    }
+    return c;
+}
+
 umb_settings_t umb_settings_sanitize(umb_settings_t s)
 {
     const umb_settings_t d = umb_settings_defaults();
@@ -263,7 +304,7 @@ bool umb_settings_set_kv(const umb_settings_t *in, const char *key, const char *
     if (!store_value(&t, f, value)) return false;
     /* Cross-field rules: sanitize must be a no-op, otherwise reject. */
     umb_settings_t c = umb_settings_sanitize(t);
-    if (memcmp(&c, &t, sizeof t) != 0) return false;
+    if (!umb_settings_equal(&c, &t)) return false;
     *out = t;
     return true;
 }

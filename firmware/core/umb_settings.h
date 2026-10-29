@@ -62,6 +62,10 @@ typedef struct {
 umb_settings_t umb_settings_defaults(void);
 /* Clamp to ranges; non-finite floats become the default. */
 umb_settings_t umb_settings_sanitize(umb_settings_t s);
+/* Field-wise comparison (ignores struct padding). */
+bool umb_settings_equal(const umb_settings_t *a, const umb_settings_t *b);
+/* Copy with zeroed padding / string tails; used so encoded blobs are deterministic. */
+umb_settings_t umb_settings_canonical(const umb_settings_t *s);
 /* Set one field. Rejects (false, *out untouched) unknown keys and
  * out-of-range or unparsable values. `in` and `out` may alias. */
 bool umb_settings_set_kv(const umb_settings_t *in, const char *key, const char *value, umb_settings_t *out);

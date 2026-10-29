@@ -4,6 +4,7 @@
 #include <string.h>
 #include <math.h>
 #include <stdlib.h>
+#include <stddef.h>
 
 TEST(test_crc32_known_vector) {
     ASSERT_EQ(umb_crc32((const uint8_t *)"123456789", 9), 0xCBF43926u);
@@ -60,7 +61,7 @@ TEST(test_sanitize_cap_near_below_far) {
 TEST(test_set_kv_rejects_out_of_range) {
     umb_settings_t d = umb_settings_defaults(), o = d;
     ASSERT_FALSE(umb_settings_set_kv(&d, "cmd_timeout_ms", "2000", &o));
-    ASSERT_TRUE(memcmp(&d, &o, sizeof d) == 0);
+    ASSERT_TRUE(umb_settings_equal(&d, &o));
     ASSERT_TRUE(umb_settings_set_kv(&d, "cmd_timeout_ms", "300", &o));
     ASSERT_EQ(o.cmd_timeout_ms, 300);
     ASSERT_EQ(d.cmd_timeout_ms, 250);
@@ -176,7 +177,7 @@ TEST(test_set_kv_reflex_action) {
 TEST(test_sanitize_idempotent_on_defaults) {
     umb_settings_t d = umb_settings_defaults();
     umb_settings_t r = umb_settings_sanitize(d);
-    ASSERT_TRUE(memcmp(&d, &r, sizeof d) == 0);
+    ASSERT_TRUE(umb_settings_equal(&d, &r));
 }
 
 TEST(test_encode_decode_roundtrip) {
@@ -187,7 +188,7 @@ TEST(test_encode_decode_roundtrip) {
     ASSERT_TRUE(n > 0 && n <= UMB_SETTINGS_SLOT_SIZE);
     ASSERT_TRUE(umb_settings_decode(buf, n, &o, &seq));
     ASSERT_EQ(seq, 7);
-    ASSERT_TRUE(memcmp(&d, &o, sizeof d) == 0);
+    ASSERT_TRUE(umb_settings_equal(&d, &o));
     ASSERT_EQ(umb_settings_encode(&d, 7, buf, n - 1), 0);
     ASSERT_FALSE(umb_settings_decode(buf, n - 1, &o, &seq));
     ASSERT_FALSE(umb_settings_decode(buf, 4, &o, &seq));
@@ -269,7 +270,7 @@ TEST(test_pick_slot_erased_flash_gives_defaults) {
     umb_settings_t o, d = umb_settings_defaults(); uint32_t s = 99;
     memset(a, 0xFF, sizeof a); memset(b, 0xFF, sizeof b);
     ASSERT_EQ(umb_settings_pick_slot(a, b, sizeof a, &o, &s), -1);
-    ASSERT_TRUE(memcmp(&o, &d, sizeof d) == 0);
+    ASSERT_TRUE(umb_settings_equal(&o, &d));
     ASSERT_EQ(s, 0);
 }
 
@@ -288,7 +289,29 @@ TEST(test_pick_slot_equal_seq_prefers_slot0) {
     ASSERT_EQ(umb_settings_pick_slot(a, b, sizeof a, &o, &s), 0);
 }
 
+TEST(test_padding_garbage_does_not_matter) {
+    umb_settings_t d = umb_settings_defaults(), g, o;
+    umb_settings_t c = umb_settings_canonical(&d);
+    memset(&g, 0xAA, sizeof g);
+    uint8_t *gp = (uint8_t *)&g;
+    const uint8_t *cp = (const uint8_t *)&c;
+    for (size_t i = 0; i < sizeof g; i++) {
+        if (i == offsetof(umb_settings_t, arming_mode) + 1 ||
+            (i >= offsetof(umb_settings_t, servo_reverse) + 1 &&
+             i < offsetof(umb_settings_t, pid_kp))) continue;   /* leave poison in padding */
+        gp[i] = cp[i];
+    }
+    ASSERT_TRUE(umb_settings_equal(&d, &g));
+    ASSERT_TRUE(umb_settings_set_kv(&g, "cmd_timeout_ms", "250", &o));
+    uint8_t b1[UMB_SETTINGS_SLOT_SIZE], b2[UMB_SETTINGS_SLOT_SIZE];
+    size_t n1 = umb_settings_encode(&d, 1, b1, sizeof b1);
+    size_t n2 = umb_settings_encode(&g, 1, b2, sizeof b2);
+    ASSERT_EQ(n1, n2);
+    ASSERT_TRUE(memcmp(b1, b2, n1) == 0);
+}
+
 int main(void) {
+    RUN_TEST(test_padding_garbage_does_not_matter);
     RUN_TEST(test_crc32_known_vector);
     RUN_TEST(test_defaults_match_table);
     RUN_TEST(test_sanitize_clamps_and_fixes_nan);

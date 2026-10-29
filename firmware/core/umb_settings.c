@@ -65,7 +65,8 @@ size_t umb_settings_encode(const umb_settings_t *s, uint32_t seq, uint8_t *buf, 
     put_u16(buf + 4, UMB_SETTINGS_VERSION);
     put_u16(buf + 6, (uint16_t)sizeof *s);
     put_u32(buf + 8, seq);
-    memcpy(buf + HDR_LEN, s, sizeof *s);
+    umb_settings_t c = umb_settings_canonical(s);
+    memcpy(buf + HDR_LEN, &c, sizeof c);
     put_u32(buf + HDR_LEN + sizeof *s, umb_crc32(buf, HDR_LEN + sizeof *s));
     return total;
 }
