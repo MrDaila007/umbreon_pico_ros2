@@ -2,7 +2,7 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates gcc-arm-none-eabi libnewlib-arm-none-eabi \
+      ca-certificates gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib \
       cmake ninja-build gcc g++ make python3 python3-pip git gcovr \
       pkg-config libusb-1.0-0-dev \
     && rm -rf /var/lib/apt/lists/*

@@ -2,6 +2,7 @@ DC := docker compose -f docker/compose.yml run --rm fw-build
 export UID := $(shell id -u)
 export GID := $(shell id -g)
 HOST_BUILD := build/host
+FW_BUILD := build/fw
 
 .PHONY: test coverage fw microros image
 
@@ -28,7 +29,11 @@ coverage: test
 	  else echo "coverage: no firmware/core/*.c yet, nothing to measure"; fi'
 
 fw:
-	@echo "make fw: not implemented yet (Task 12)"; exit 1
+	$(DC) bash -c 'set -e; \
+	  cmake -S firmware -B $(FW_BUILD) -G Ninja >/dev/null; \
+	  cmake --build $(FW_BUILD); \
+	  test -f $(FW_BUILD)/umbreon_pico_ros2.uf2; \
+	  echo "built $(FW_BUILD)/umbreon_pico_ros2.uf2"'
 
 microros:
 	./micro_ros/build.sh
