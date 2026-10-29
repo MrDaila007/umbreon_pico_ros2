@@ -6,6 +6,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "hardware/watchdog.h"
+#include "pico/stdio_usb.h"
 #include "hal_flash_store.h"
 #include "shared_state.h"
 #include "umb_console_parse.h"
@@ -102,7 +103,13 @@ static umb_cmd_t neutral_cmd(uint32_t now_ms) {
     return c;
 }
 
-static void start_drive(const umb_console_cmd_t *cc, console_repeat_t *rep, uint32_t now_ms) {
+static void start_drive(const umb_console_cmd_t *cc, console_origin_t origin,
+                        console_repeat_t *rep, uint32_t now_ms) {
+    /* Never start a repeat nobody can stop: a USB line racing a disconnect. */
+    if (origin == CONSOLE_ORIGIN_USB && !stdio_usb_connected()) {
+        printf("refused: usb disconnected\n");
+        return;
+    }
     umb_cmd_t c = neutral_cmd(now_ms);
     c.kind = (cc->kind == UMB_CC_RAW) ? UMB_CMD_RAW : UMB_CMD_SPEED;
     c.mode = (cc->kind == UMB_CC_AUTO) ? UMB_DRIVE_AUTO : UMB_DRIVE_MANUAL;
@@ -110,6 +117,7 @@ static void start_drive(const umb_console_cmd_t *cc, console_repeat_t *rep, uint
     c.value = cc->value;
     shared_post_cmd(&c);
     rep->cmd = c;
+    rep->origin = origin;
     rep->active = true;
     rep->end_ms = now_ms + cc->duration_ms;
     rep->next_ms = now_ms + CONSOLE_REPEAT_MS;
@@ -189,7 +197,7 @@ static void reboot_now(void) {
     for (;;) vTaskDelay(portMAX_DELAY);
 }
 
-void console_execute(const char *line, console_repeat_t *rep, uint32_t now_ms) {
+void console_execute(const char *line, console_origin_t origin, console_repeat_t *rep, uint32_t now_ms) {
     umb_console_cmd_t cc;
     if (!umb_console_parse(line, &cc)) { printf("error: invalid command (try help)\n"); return; }
     switch (cc.kind) {
@@ -197,7 +205,7 @@ void console_execute(const char *line, console_repeat_t *rep, uint32_t now_ms) {
     case UMB_CC_STATUS:    print_status(); break;
     case UMB_CC_RAW:
     case UMB_CC_SPEED:
-    case UMB_CC_AUTO:      start_drive(&cc, rep, now_ms); break;
+    case UMB_CC_AUTO:      start_drive(&cc, origin, rep, now_ms); break;
     case UMB_CC_STOP:      stop_now(rep, now_ms); printf("ok\n"); break;
     case UMB_CC_ARM_CAR:   arm_request(SHARED_ARM_CAR); break;
     case UMB_CC_ARM_ROS:   arm_request(SHARED_ARM_ROS); break;

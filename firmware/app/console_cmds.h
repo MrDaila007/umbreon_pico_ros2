@@ -6,9 +6,15 @@
 
 #define CONSOLE_REPEAT_MS 20u
 
-/* A raw / speed / auto command being re-posted every CONSOLE_REPEAT_MS. */
+/* Which console a line came from. */
+typedef enum { CONSOLE_ORIGIN_USB, CONSOLE_ORIGIN_UART } console_origin_t;
+
+/* A raw / speed / auto command being re-posted every CONSOLE_REPEAT_MS.
+ * A USB-origin repeat stops as soon as the USB CDC host disconnects; a
+ * UART-origin repeat runs to its [ms]. */
 typedef struct {
     bool active;
+    console_origin_t origin;
     umb_cmd_t cmd;
     uint32_t end_ms;
     uint32_t next_ms;
@@ -16,4 +22,4 @@ typedef struct {
 
 /* reset_reason must outlive the console (a string literal). */
 void console_cmds_init(const char *reset_reason);
-void console_execute(const char *line, console_repeat_t *rep, uint32_t now_ms);
+void console_execute(const char *line, console_origin_t origin, console_repeat_t *rep, uint32_t now_ms);

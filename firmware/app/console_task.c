@@ -15,6 +15,7 @@
 
 typedef struct {
     stdio_driver_t *drv;
+    console_origin_t origin;
     char buf[LINE_MAX];
     unsigned len;
     bool overflow;      /* drop the rest of an over-long line */
@@ -50,12 +51,17 @@ static void poll_source(line_src_t *src, console_repeat_t *rep) {
     char chunk[32];
     int n = src->drv->in_chars(chunk, (int)sizeof chunk);
     for (int i = 0; i < n; i++) {
-        if (feed(src, chunk[i])) console_execute(src->buf, rep, hal_now_ms());
+        if (feed(src, chunk[i])) console_execute(src->buf, src->origin, rep, hal_now_ms());
     }
 }
 
+/* A USB-origin repeat ends silently when the host disconnects (unplug, port
+ * closed, helper killed): no neutral is posted, so the 250 ms timeout stops
+ * the car and motion then needs a fresh neutral. End of [ms] posts no
+ * neutral either (same latch). */
 static void run_repeat(console_repeat_t *rep, uint32_t now) {
     if (!rep->active) return;
+    if (rep->origin == CONSOLE_ORIGIN_USB && !stdio_usb_connected()) { rep->active = false; return; }
     if ((int32_t)(now - rep->end_ms) >= 0) { rep->active = false; return; }
     if ((int32_t)(now - rep->next_ms) < 0) return;
     rep->cmd.rx_ms = now;
@@ -65,8 +71,8 @@ static void run_repeat(console_repeat_t *rep, uint32_t now) {
 
 void console_task(void *param) {
     console_cmds_init((const char *)param);
-    line_src_t usb = { .drv = &stdio_usb };
-    line_src_t uart = { .drv = &stdio_uart };
+    line_src_t usb = { .drv = &stdio_usb, .origin = CONSOLE_ORIGIN_USB };
+    line_src_t uart = { .drv = &stdio_uart, .origin = CONSOLE_ORIGIN_UART };
     console_repeat_t rep = { 0 };
     uint32_t next_beat = hal_now_ms();
     printf("\numbreon_pico_ros2 console ready; type 'help'\n");
