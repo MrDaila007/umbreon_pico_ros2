@@ -1,6 +1,7 @@
 /* umb_console_parse.c - console line parser (pure C11) */
 #include "umb_console_parse.h"
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -105,24 +106,32 @@ static bool valid_ipv4(const char *s) {
     return *s == '\0';
 }
 
+/* Bounded copy: fails (and writes nothing) if src plus NUL does not fit. */
+static bool copy_bounded(char *dst, size_t dst_size, const char *src) {
+    size_t n = strlen(src);
+    if (n + 1 > dst_size) return false;
+    memcpy(dst, src, n + 1);
+    return true;
+}
+
 static bool parse_wifi(const tokens_t *t, umb_console_cmd_t *o) {
     if (t->count != 4 || strcmp(t->tok[1], "set") != 0) return false;
     size_t ssid = strlen(t->tok[2]), pass = strlen(t->tok[3]);
     if (ssid < 1 || ssid > SSID_MAX) return false;
     if (pass != 0 && (pass < PASS_MIN || pass > PASS_MAX)) return false;
-    memcpy(o->arg1, t->tok[2], ssid + 1);
-    memcpy(o->arg2, t->tok[3], pass + 1);
-    return true;
+    return copy_bounded(o->arg1, sizeof o->arg1, t->tok[2]) &&
+           copy_bounded(o->arg2, sizeof o->arg2, t->tok[3]);
 }
 
 static bool parse_agent(const tokens_t *t, umb_console_cmd_t *o) {
     unsigned long port;
     if (t->count != 4 || strcmp(t->tok[1], "set") != 0) return false;
     if (strcmp(t->tok[2], "discover") != 0 && !valid_ipv4(t->tok[2])) return false;
+    if (strlen(t->tok[3]) > 5) return false;
     if (!parse_uint(t->tok[3], &port) || port < 1ul || port > 65535ul) return false;
-    memcpy(o->arg1, t->tok[2], strlen(t->tok[2]) + 1);   /* <= 15 or 8 chars */
-    memcpy(o->arg2, t->tok[3], strlen(t->tok[3]) + 1);   /* digits, <= 65 */
-    return true;
+    if (!copy_bounded(o->arg1, sizeof o->arg1, t->tok[2])) return false;
+    /* canonical port text: "08888" is stored as "8888" */
+    return snprintf(o->arg2, sizeof o->arg2, "%lu", port) > 0;
 }
 
 static bool parse_mode(const tokens_t *t, umb_console_cmd_t *o) {
@@ -139,15 +148,14 @@ static bool parse_mode(const tokens_t *t, umb_console_cmd_t *o) {
 static bool copy_key(const char *s, umb_console_cmd_t *o) {
     size_t n = strlen(s);
     if (n < 1 || n > KEY_MAX) return false;
-    memcpy(o->key, s, n + 1);
-    return true;
+    return copy_bounded(o->key, sizeof o->key, s);
 }
 
 static bool parse_set(const tokens_t *t, umb_console_cmd_t *o) {
+    if (t->count != 3) return false;
     size_t n = strlen(t->tok[2]);
-    if (t->count != 3 || n < 1 || n > VALUE_MAX || !copy_key(t->tok[1], o)) return false;
-    memcpy(o->arg1, t->tok[2], n + 1);
-    return true;
+    if (n < 1 || n > VALUE_MAX || !copy_key(t->tok[1], o)) return false;
+    return copy_bounded(o->arg1, sizeof o->arg1, t->tok[2]);
 }
 
 /* Commands taking no arguments. */
@@ -185,7 +193,7 @@ static bool dispatch(const tokens_t *t, umb_console_cmd_t *o) {
 }
 
 bool umb_console_parse(const char *line, umb_console_cmd_t *out) {
-    tokens_t t;
+    tokens_t t = { 0, { { 0 } } };
     if (out == NULL) return false;
     memset(out, 0, sizeof *out);
     if (line == NULL || !tokenize(line, &t) || !dispatch(&t, out)) {

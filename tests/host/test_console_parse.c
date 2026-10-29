@@ -277,7 +277,36 @@ TEST(test_parse_very_long_token_invalid) {
     ASSERT_TRUE(is_invalid(line));
 }
 
+TEST(test_parse_missing_args_invalid) {
+    ASSERT_TRUE(is_invalid("set"));
+    ASSERT_TRUE(is_invalid("set a"));
+    ASSERT_TRUE(is_invalid("get"));
+    ASSERT_TRUE(is_invalid("agent"));
+    ASSERT_TRUE(is_invalid("agent set"));
+    ASSERT_TRUE(is_invalid("agent set discover"));
+    ASSERT_TRUE(is_invalid("wifi"));
+    ASSERT_TRUE(is_invalid("wifi set"));
+    ASSERT_TRUE(is_invalid("mode"));
+    ASSERT_TRUE(is_invalid("arm"));
+    ASSERT_TRUE(is_invalid("raw"));
+}
+
+TEST(test_parse_agent_port_overflow_and_canonical) {
+    char line[300];
+    umb_console_cmd_t c;
+    memset(line, 0, sizeof line);
+    strcpy(line, "agent set 1.2.3.4 ");
+    memset(line + strlen(line), '0', 100);
+    strcat(line, "80");
+    ASSERT_TRUE(is_invalid(line));
+    ASSERT_TRUE(is_invalid("agent set 1.2.3.4 000080"));
+    ASSERT_TRUE(parse("agent set 1.2.3.4 08888", &c));   /* canonicalised */
+    ASSERT_TRUE(strcmp(c.arg2, "8888") == 0);
+}
+
 int main(void) {
+    RUN_TEST(test_parse_missing_args_invalid);
+    RUN_TEST(test_parse_agent_port_overflow_and_canonical);
     RUN_TEST(test_parse_raw_default_duration);
     RUN_TEST(test_parse_raw_duration_capped);
     RUN_TEST(test_parse_duration_invalid);
