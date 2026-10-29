@@ -11,7 +11,8 @@ must see. Record results in the `Result:` lines. Stop and report at the first st
 - **Start low.** First movement is `raw 0 0.3`. Do not go above 0.5 on this bench. Reverse is capped by
   firmware at 0.38.
 - **Emergency stop, in order of speed:** cut ESC power; unplug the battery; type `stop` (neutral now) or
-  `disarm` (neutral and clears both keys); unplug the console cable (the car still obeys the timeout, see 7).
+  `disarm` (neutral and clears both keys). Unplugging the console cable does **NOT** stop a command that is
+  already running: it keeps going until its `[ms]` ends (3 s at most, see step 7).
 - A driving command lasts at most 3 s (`[ms]` defaults to 1000, max 3000) and then the car goes neutral
   by itself (command timeout 250 ms after the last refresh).
 - Keep the steering servo away from your fingers. Do not run any step that is not on this list.
@@ -55,7 +56,7 @@ Result:
 - [ ] `arm car` -> `armed: no (car key yes, ros key no; motion needs a neutral command first)`.
   Then `arm ros` -> `armed: yes (car key yes, ros key yes; ...)`.
 - [ ] Still no motion: `raw 0 0.3 500` right now must NOT move the wheels (no neutral yet).
-  Send `raw 0 0` (neutral), then `status` shows `armed: yes (mode both, car key yes, ros key yes, neutral seen yes)`.
+  Send `raw 0 0 3000` (neutral), then within about 1 s `status` shows `armed: yes (mode both, car key yes, ros key yes, neutral seen yes)`.
 - [ ] `raw 0 0.3 2000` -> wheels turn for about 2 s, then stop on their own. During the run `status` shows
   `motion yes` and `stop: none`; afterwards `esc 1500 us` and `stop: cmd_timeout`.
   If the wheels do not turn at 0.3 (below the motor's start), repeat with 0.4, never above 0.5.
@@ -76,9 +77,11 @@ Result:
 
 ## 5. Steering limits and settings persistence
 
-Defaults: `min_point 60`, `neutral_point 90`, `max_point 120` (servo degrees; pulse = 700 + deg*1600/180 us).
+Defaults: `min_point 60`, `neutral_point 90`, `max_point 120` (servo degrees; pulse = 700 + deg*1600/180 us, integer division).
 
-- [ ] `raw -1 0 1000` then `status`: `servo 1233 us` (default). `raw 1 0 1000`: `servo 1767 us`. `raw 0 0`: `servo 1500 us`.
+- [ ] `raw -1 0 3000`, and type `status` while it is still running (within the 3 s; the servo only steers while
+  a command is live and returns to 1500 afterwards): `servo 1233 us` (default). Same with `raw 1 0 3000`:
+  `servo 1766 us`. `raw 0 0 3000`: `servo 1500 us`.
   The steering must reach each end without binding or buzzing. (Needs arming and a neutral first, as in step 3.)
 - [ ] If it binds, adjust (disarmed): `get min_point`, `set min_point 65`, `set max_point 115`,
   `set neutral_point 92` (each replies `ok (not saved; run save)`). Re-check with `raw -1 0` / `raw 1 0`.
