@@ -385,19 +385,19 @@ flash HAL and their host integration tests.
 
 **Files:** umb_net_fsm, umb_network_identity, host tests.
 
-- [ ] Tests first: empty credentials -> AP in AUTO; STA timeout at configured
+- [x] Tests first: empty credentials -> AP in AUTO; STA timeout at configured
   seconds -> AP; STA_ONLY never falls back; AP_ONLY never tries STA; AP with no
   session retries STA every 60 s; active/creating session prevents retry; failures
   recover with finite backoff; wrap-safe deadlines; endpoint changes invalidate
   generation exactly once; invalidated DHCP candidate is not retained forever.
-- [ ] Define input events (link/lease/ping/create results) and output actions; no
+- [x] Define input events (link/lease/ping/create results) and output actions; no
   socket, SDK or shared calls inside policy. A bounded action advances one step.
-- [ ] First attempts: STA immediate; after AP retry failure restore AP with the
+- [x] First attempts: STA immediate; after AP retry failure restore AP with the
   same identity; apply capped retry backoff in STA_ONLY instead of busy looping.
-- [ ] Identity tests: suffix from device MAC as `umbreon-XXXX`, WPA2-safe generated
+- [x] Identity tests: suffix from device MAC as `umbreon-XXXX`, WPA2-safe generated
   password length >=12 and <=63, distinct supplied entropy changes password,
   existing valid password preserved, invalid configured pass is rejected.
-- [ ] Run host tests/coverage; commit `feat: network recovery and AP identity policy`.
+- [x] Run host tests/coverage; commit `feat: network recovery and AP identity policy`.
 
 ## Task 4: Production UDP, WiFi and DHCP adapters
 
