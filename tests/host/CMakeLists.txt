@@ -94,3 +94,16 @@ target_include_directories(test_microros_platform PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../net/stubs
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)
 target_compile_definitions(test_microros_platform PRIVATE _DEFAULT_SOURCE=1)
+
+# Actual endpoint/radio bridge with fake snapshots/probe, no real network access.
+target_sources(test_net_endpoint PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/net_endpoint.c)
+target_include_directories(test_net_endpoint PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../net/stubs
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)
+
+# Actual WiFi orchestration with fake async adapters and time.
+target_sources(test_net_wifi PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/net_wifi.c)
+target_include_directories(test_net_wifi PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)

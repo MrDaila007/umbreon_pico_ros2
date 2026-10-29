@@ -23,12 +23,22 @@ The network task remains staged offline; no Plan3 image has been flashed.
 - A selected endpoint remains fixed until invalidated or explicitly cleared on
   session failure. Membership uses both IP and MAC, rejecting IP reuse.
 
-Seven host tests cover fixed/broadcast selection, a phone-first/PC-second AP,
+Seven pure host tests cover fixed/broadcast selection, a phone-first/PC-second AP,
 lease reorder/expiry/disconnect/reuse, timeout and counter wrap, stale results,
 wrong-source replies, round-robin retries, malformed subnet/candidate snapshots,
 and bounded processing even when snapshot counts exceed the array capacities.
-Docker ARM build and coverage suite pass: 343 C tests in 28 executables plus
+Docker ARM build and coverage suite pass: 350 C tests in 30 executables plus
 10 Python contract tests. See ignored `build/plan3-task6-{fw,coverage}.log`.
+
+The actual `net_endpoint` HAL bridge is also host-tested (three tests): real
+snapshot/probe control flow against fake WiFi/DHCP/XRCE operations, including a
+client disconnecting during the probe and failed close retaining ownership.
+`net_wifi` connects the pure WiFi FSM to async adapters (four tests). Radio I/O
+runs on the iteration after the decision, giving the owner time to deliver loss
+and tear down all resources. Deferred join deadlines start at actual I/O, so
+teardown time cannot consume the new join budget. Missing AP credentials fail
+closed with FSM backoff and no flash access. Owner settings edits must remain
+staged until teardown; credentials are never logged by these components.
 
 Remaining Task6 work: connect owner FSM to real adapters and session lifecycle,
 provision a missing AP credential through verified maintenance persistence,
