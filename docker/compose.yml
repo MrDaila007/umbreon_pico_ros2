@@ -1,0 +1,10 @@
+services:
+  fw-build:
+    build: ./fw-build
+    image: umbreon-pico-fw-build
+    volumes:
+      - ..:/work
+    working_dir: /work
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      HOME: /tmp
