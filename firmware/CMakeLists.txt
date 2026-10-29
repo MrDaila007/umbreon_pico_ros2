@@ -69,6 +69,7 @@ set(FW_SRCS
     hal/hal_tach.c
     hal/hal_flash_store.c
     hal/hal_time.c
+    hal/hal_microros_platform.c
     hal/hal_wifi.c
     hal/hal_dhcp_server.c
     hal/hal_udp_probe.c
@@ -109,6 +110,7 @@ target_compile_definitions(umbreon_pico_ros2 PRIVATE
     PICO_DEFAULT_UART_BAUD_RATE=115200
     PICO_STDIO_USB_STDOUT_TIMEOUT_US=30000)  # a stalled terminal must not block core 0 for 500 ms (UMB_STOP_CORE0)
 target_link_libraries(umbreon_pico_ros2
+    ${MICROROS_DIR}/libmicroros.a
     pico_stdlib
     pico_cyw43_arch_lwip_sys_freertos
     pico_flash

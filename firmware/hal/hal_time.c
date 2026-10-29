@@ -5,3 +5,5 @@
 uint32_t hal_now_ms(void) {
     return to_ms_since_boot(get_absolute_time());
 }
+
+uint64_t hal_now_us64(void) { return time_us_64(); }

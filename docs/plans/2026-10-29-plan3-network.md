@@ -431,23 +431,26 @@ DHCP client interoperability and discovery remain Task13/owner HIL checks.
 
 ## Task 5: Platform hooks and core-0 network skeleton
 
+**Completed:** see `docs/validation/plan3-task5.md`. Platform initialization is
+active in the staged owner; actual WiFi/session orchestration is Task6/9.
+
 **Files:** hal_microros_platform, net_task skeleton, CMake, lwipopts, FreeRTOSConfig,
 main/task pinning, allocator tests.
 
-- [ ] Install one FreeRTOS-backed rcl allocator before all rcl initialization.
+- [x] Install one FreeRTOS-backed rcl allocator before all rcl initialization.
   Test alignment, null/zero realloc semantics, preserved contents, overflow in
   size+header/count*size and failed realloc leaving the old allocation intact.
-- [ ] Implement monotonic clock_gettime/usleep glue once; sleep yields appropriately
+- [x] Implement monotonic clock_gettime/usleep glue once; sleep yields appropriately
   after scheduler start. Avoid duplicate libc symbols with SDK/micro-ROS objects.
-- [ ] Link `pico_cyw43_arch_lwip_sys_freertos` and static library, carry forward
+- [x] Link `pico_cyw43_arch_lwip_sys_freertos` and static library, carry forward
   measured spike lwIP configuration. Verify TCP/IP/async-context core affinity,
   stack sizes and priorities from actual SDK 2.2.0 sources. Keep core-1 timer pool.
-- [ ] Add network task idle+3/core0 and sufficient initial stack from measured
+- [x] Add network task idle+3/core0 and sufficient initial stack from measured
   lifecycle usage. Keep total allocated RTOS heap + static bss within physical
   RAM. Audit libc `malloc` users versus the rcl/FreeRTOS allocator too.
-- [ ] A network-disabled/offline stub must maintain safe neutral boot; final
+- [x] A network-disabled/offline stub must maintain safe neutral boot; final
   heartbeat ownership change is atomic with enabling the production loop.
-- [ ] Firmware clean build + unit tests; commit
+- [x] Firmware clean build + unit tests; commit
   `feat: micro-ROS platform hooks and core-0 network task`.
 
 ## Task 6: WiFi mode orchestration and endpoint selection

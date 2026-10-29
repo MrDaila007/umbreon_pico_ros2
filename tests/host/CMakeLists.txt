@@ -86,3 +86,11 @@ target_sources(test_dhcp_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../firmwa
 target_include_directories(test_dhcp_server PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../net/stubs
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)
+
+# Production rcl allocator/platform hooks with fake RTOS/time and rcutils registration.
+target_sources(test_microros_platform PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal/hal_microros_platform.c)
+target_include_directories(test_microros_platform PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/task_stubs
+  ${CMAKE_CURRENT_SOURCE_DIR}/../net/stubs
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)
+target_compile_definitions(test_microros_platform PRIVATE _DEFAULT_SOURCE=1)
