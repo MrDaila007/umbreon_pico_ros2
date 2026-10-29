@@ -55,6 +55,11 @@ set(FW_SRCS
     hal/hal_tach.c
     hal/hal_flash_store.c
     hal/hal_time.c
+    hal/hal_i2c.c
+    hal/hal_gpio_misc.c
+    hal/hal_adc.c
+    hal/hal_buzzer.c
+    hal/hal_encoder.c
     app/shared_state.c
     app/control_task.c
     app/console_task.c
@@ -67,6 +72,7 @@ set_source_files_properties(${FW_SRCS} ${CORE_SRCS} PROPERTIES
 target_include_directories(umbreon_pico_ros2 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_LIST_DIR}/core
+    ${CMAKE_CURRENT_LIST_DIR}/drivers
     ${CMAKE_CURRENT_LIST_DIR}/hal
     ${CMAKE_CURRENT_LIST_DIR}/app)
 target_compile_definitions(umbreon_pico_ros2 PRIVATE
@@ -83,6 +89,8 @@ target_link_libraries(umbreon_pico_ros2
     pico_stdlib
     pico_flash
     hardware_pwm
+    hardware_i2c
+    hardware_adc
     hardware_watchdog
     hardware_flash
     hardware_sync
