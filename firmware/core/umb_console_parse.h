@@ -6,7 +6,8 @@
 
 typedef enum { UMB_CC_INVALID, UMB_CC_HELP, UMB_CC_STATUS, UMB_CC_RAW, UMB_CC_SPEED, UMB_CC_AUTO, UMB_CC_STOP,
                UMB_CC_ARM_CAR, UMB_CC_ARM_ROS, UMB_CC_DISARM, UMB_CC_MODE, UMB_CC_GET, UMB_CC_SET,
-               UMB_CC_SAVE, UMB_CC_DEFAULTS, UMB_CC_REBOOT, UMB_CC_WIFI_SET, UMB_CC_AGENT_SET } umb_cc_kind_t;
+               UMB_CC_SAVE, UMB_CC_DEFAULTS, UMB_CC_REBOOT, UMB_CC_WIFI_SET, UMB_CC_AGENT_SET,
+               UMB_CC_SENSORS, UMB_CC_CAL_IMU } umb_cc_kind_t;
 
 typedef struct {
     umb_cc_kind_t kind;

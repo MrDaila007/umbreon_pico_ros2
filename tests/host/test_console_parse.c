@@ -304,6 +304,21 @@ TEST(test_parse_agent_port_overflow_and_canonical) {
     ASSERT_TRUE(strcmp(c.arg2, "8888") == 0);
 }
 
+TEST(test_parse_sensors_and_cal_imu) {
+    umb_console_cmd_t c;
+    ASSERT_TRUE(parse("sensors", &c));
+    ASSERT_EQ(c.kind, UMB_CC_SENSORS);
+    ASSERT_TRUE(parse("  sensors\r\n", &c));
+    ASSERT_EQ(c.kind, UMB_CC_SENSORS);
+    ASSERT_TRUE(parse("cal imu", &c));
+    ASSERT_EQ(c.kind, UMB_CC_CAL_IMU);
+    ASSERT_TRUE(is_invalid("sensors now"));
+    ASSERT_TRUE(is_invalid("cal"));
+    ASSERT_TRUE(is_invalid("cal tof"));
+    ASSERT_TRUE(is_invalid("cal imu now"));
+    ASSERT_TRUE(is_invalid("sensor"));
+}
+
 int main(void) {
     RUN_TEST(test_parse_missing_args_invalid);
     RUN_TEST(test_parse_agent_port_overflow_and_canonical);
@@ -328,5 +343,6 @@ int main(void) {
     RUN_TEST(test_parse_trailing_newline_ok);
     RUN_TEST(test_parse_out_fully_initialised);
     RUN_TEST(test_parse_very_long_token_invalid);
+    RUN_TEST(test_parse_sensors_and_cal_imu);
     TEST_SUMMARY();
 }

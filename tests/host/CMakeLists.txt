@@ -40,3 +40,17 @@ foreach(src ${TEST_SRCS})
   endif()
   add_test(NAME ${name} COMMAND ${name})
 endforeach()
+
+# Run the real IMU task with a fake clock/bus; no Pico SDK or scheduler required.
+target_sources(test_sensors_task PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/sensors_task.c)
+target_include_directories(test_sensors_task PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/task_stubs
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)
+
+# Snapshot expiry is checked in the real shared-state reader, including stalled producers.
+target_sources(test_shared_state PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/shared_state.c)
+target_include_directories(test_shared_state PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/task_stubs
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)

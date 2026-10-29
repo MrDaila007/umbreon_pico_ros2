@@ -3,6 +3,8 @@
 #include <string.h>
 #include "hardware/sync.h"
 #include "umb_actuation.h"
+#include "umb_tof_array.h"
+#include "umb_imu_filter.h"
 #include "hal_time.h"
 
 #define ARM_QUEUE_LEN 8u
@@ -17,6 +19,11 @@ typedef struct {
     umb_settings_t settings;
     umb_outputs_t outputs;
     umb_arming_t arming;
+    shared_sensors_t sensors;
+    bool imu_cal_requested;
+    int cue;
+    bool cue_pending;
+    int encoder_state;
 } shared_t;
 
 static shared_t s_shared;
@@ -39,6 +46,8 @@ void shared_init(const umb_settings_t *s) {
     s_shared.outputs.esc_us = UMB_ESC_NEUTRAL_US;
     s_shared.outputs.stop_mask = UMB_STOP_NO_CMD;
     s_shared.arming = umb_arming_init((umb_arm_mode_t)s->arming_mode);
+    for (int i = 0; i < 6; i++) s_shared.sensors.tof_mm[i] = UMB_TOF_INVALID_MM;
+    s_shared.encoder_state = SHARED_ENC_STARTING;
 }
 
 void shared_post_cmd(const umb_cmd_t *cmd) {
@@ -149,4 +158,72 @@ bool shared_settings_write_allowed(void) {
     bool allowed = !s_shared.outputs.armed && s_shared.arm_count == 0u;
     unlock(irq);
     return allowed;
+}
+
+void shared_publish_sensors(const shared_sensors_t *s) {
+    uint32_t irq = lock();
+    s_shared.sensors = *s;
+    unlock(irq);
+}
+
+void shared_get_sensors(shared_sensors_t *out) {
+    uint32_t irq = lock();
+    *out = s_shared.sensors;
+    unlock(irq);
+    uint32_t now = hal_now_ms();
+    out->tof_online = 0;
+    for (int i = 0; i < UMB_TOF_COUNT; i++) {
+        bool fresh = (out->tof_online_mask & (1u << i)) &&
+                     (int32_t)(now - out->tof_stamp_ms[i]) <= (int32_t)UMB_TOF_STALE_MS;
+        if (fresh) out->tof_online++;
+        else {
+            out->tof_online_mask &= (uint8_t)~(1u << i);
+            out->tof_mm[i] = UMB_TOF_INVALID_MM;
+        }
+    }
+    out->imu_ok = out->imu_ok &&
+                  (int32_t)(now - out->imu_stamp_ms) <= (int32_t)UMB_IMU_STALE_MS;
+}
+
+void shared_request_imu_cal(void) {
+    uint32_t irq = lock();
+    s_shared.imu_cal_requested = true;
+    unlock(irq);
+}
+
+bool shared_take_imu_cal(void) {
+    uint32_t irq = lock();
+    bool req = s_shared.imu_cal_requested;
+    s_shared.imu_cal_requested = false;
+    unlock(irq);
+    return req;
+}
+
+void shared_post_cue(int cue) {
+    uint32_t irq = lock();
+    s_shared.cue = cue;
+    s_shared.cue_pending = true;
+    unlock(irq);
+}
+
+bool shared_take_cue(int *cue) {
+    uint32_t irq = lock();
+    bool pending = s_shared.cue_pending;
+    if (pending) *cue = s_shared.cue;
+    s_shared.cue_pending = false;
+    unlock(irq);
+    return pending;
+}
+
+void shared_set_encoder_state(int state) {
+    uint32_t irq = lock();
+    s_shared.encoder_state = state;
+    unlock(irq);
+}
+
+int shared_encoder_state(void) {
+    uint32_t irq = lock();
+    int v = s_shared.encoder_state;
+    unlock(irq);
+    return v;
 }

@@ -1,6 +1,7 @@
 /* console_cmds.c - see console_cmds.h. Parsing is core/umb_console_parse;
  * every decision about motion is core/umb_control on core 1. */
 #include "console_cmds.h"
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include "FreeRTOS.h"
@@ -14,14 +15,19 @@
 #include "umb_reflex.h"
 #include "umb_safety.h"
 #include "umb_settings.h"
+#include "umb_tof_array.h"
 
 #define ARM_SETTLE_MS 60u      /* > one control period: let core 1 apply the request */
 #define REBOOT_FLUSH_MS 50u
+#define CAL_MAX_SPEED_MPS 0.05f   /* `cal imu` only while the car is (nearly) still */
 
 static const char *s_reset_reason = "unknown";
 
 static const char *const ARM_MODE_NAMES[] = { "none", "encoder", "ros", "both" };
 static const char *const GEAR_NAMES[] = { "neutral", "forward", "wait_stop", "brake", "gap", "reverse" };
+static const char *const TOF_LABELS[UMB_TOF_COUNT] = { "HR", "FR", "R", "L", "FL", "HL" };
+static const char *const ENCODER_STATES[] = { "starting", "ok", "FAILED (keys disabled)" };
+static const char *const STACK_TASKS[] = { "control", "console", "imu", "tof", "ui" };
 static const char *const STOP_NAMES[] = { "cmd_timeout", "agent", "wifi", "reflex", "core0", "no_cmd" };
 
 void console_cmds_init(const char *reset_reason) {
@@ -78,12 +84,51 @@ static void print_status(void) {
     if (hal_settings_slot() < 0) printf("settings: defaults\n");
     else printf("settings: slot %d (seq %lu)\n", hal_settings_slot(), (unsigned long)hal_settings_seq());
     printf("link: wifi %s, agent %s\n", wifi ? "up" : "down", agent ? "up" : "down");
+    int enc = shared_encoder_state();
+    printf("encoder: %s\n", (enc >= 0 && enc <= SHARED_ENC_FAILED) ? ENCODER_STATES[enc] : "?");
     printf("reset: %s\n", s_reset_reason);
+}
+
+/* Minimum free stack ever seen per task, in words (uxTaskGetStackHighWaterMark). */
+static void print_stack_free(void) {
+    printf("stack free (words):");
+    for (size_t i = 0; i < sizeof STACK_TASKS / sizeof STACK_TASKS[0]; i++) {
+        TaskHandle_t h = xTaskGetHandle(STACK_TASKS[i]);
+        if (h) printf(" %s %lu", STACK_TASKS[i], (unsigned long)uxTaskGetStackHighWaterMark(h));
+        else printf(" %s ?", STACK_TASKS[i]);
+    }
+    printf("\n");
+}
+
+static void print_sensors(void) {
+    shared_sensors_t sn;
+    shared_get_sensors(&sn);
+    printf("tof mm:");
+    for (int i = 0; i < UMB_TOF_COUNT; i++) printf(" %s %d", TOF_LABELS[i], (int)sn.tof_mm[i]);
+    printf("\ntof: online %u/%d, recovering %s, restarts %lu\n", (unsigned)sn.tof_online, UMB_TOF_COUNT,
+           yes_no(sn.tof_recovering), (unsigned long)sn.tof_restarts);
+    printf("accel g: %.3f %.3f %.3f\n", (double)sn.accel_g[0], (double)sn.accel_g[1], (double)sn.accel_g[2]);
+    printf("gyro dps: %.2f %.2f %.2f\n", (double)sn.gyro_dps[0], (double)sn.gyro_dps[1], (double)sn.gyro_dps[2]);
+    printf("yaw rate: %.2f dps, heading: %.1f deg\n", (double)sn.yaw_rate_dps, (double)sn.heading_deg);
+    printf("imu: ok %s, calibrated %s\n", yes_no(sn.imu_ok), yes_no(sn.imu_calibrated));
+    if (sn.bat_have) printf("battery: %.2f V (min %.2f V)\n", (double)sn.bat_v, (double)sn.bat_v_min);
+    else printf("battery: no sample\n");
+    print_stack_free();
+}
+
+static void request_imu_cal(void) {
+    umb_outputs_t o;
+    shared_get_outputs(&o);
+    if (o.armed || !shared_settings_write_allowed()) { printf("refused: armed\n"); return; }
+    if (!(fabsf(o.speed_signed) < CAL_MAX_SPEED_MPS)) { printf("refused: moving\n"); return; }
+    shared_request_imu_cal();
+    printf("ok: calibrating, keep still\n");
 }
 
 static void print_help(void) {
     printf("commands:\n"
-           "  status | help\n"
+           "  status | help | sensors\n"
+           "  cal imu                                    gyro bias calibration (disarmed, still)\n"
            "  raw <steer -1..1> <throttle -1..1> [ms]   manual, open loop (repeats every 20 ms)\n"
            "  speed <steer> <m/s> [ms]                   manual, closed loop\n"
            "  auto <steer> <m/s> [ms]                    autonomous source\n"
@@ -203,6 +248,8 @@ void console_execute(const char *line, console_origin_t origin, console_repeat_t
     switch (cc.kind) {
     case UMB_CC_HELP:      print_help(); break;
     case UMB_CC_STATUS:    print_status(); break;
+    case UMB_CC_SENSORS:   print_sensors(); break;
+    case UMB_CC_CAL_IMU:   request_imu_cal(); break;
     case UMB_CC_RAW:
     case UMB_CC_SPEED:
     case UMB_CC_AUTO:      start_drive(&cc, origin, rep, now_ms); break;

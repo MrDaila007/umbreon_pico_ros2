@@ -163,7 +163,8 @@ static bool simple_kind(const char *w, umb_cc_kind_t *k) {
     static const struct { const char *name; umb_cc_kind_t kind; } tab[] = {
         { "help", UMB_CC_HELP }, { "status", UMB_CC_STATUS }, { "stop", UMB_CC_STOP },
         { "disarm", UMB_CC_DISARM }, { "save", UMB_CC_SAVE },
-        { "defaults", UMB_CC_DEFAULTS }, { "reboot", UMB_CC_REBOOT } };
+        { "defaults", UMB_CC_DEFAULTS }, { "reboot", UMB_CC_REBOOT },
+        { "sensors", UMB_CC_SENSORS } };
     for (size_t i = 0; i < sizeof tab / sizeof tab[0]; i++) {
         if (strcmp(w, tab[i].name) == 0) { *k = tab[i].kind; return true; }
     }
@@ -183,6 +184,10 @@ static bool dispatch(const tokens_t *t, umb_console_cmd_t *o) {
         if (strcmp(t->tok[1], "car") == 0) { o->kind = UMB_CC_ARM_CAR; return true; }
         if (strcmp(t->tok[1], "ros") == 0) { o->kind = UMB_CC_ARM_ROS; return true; }
         return false;
+    }
+    if (strcmp(w, "cal") == 0) {
+        o->kind = UMB_CC_CAL_IMU;
+        return t->count == 2 && strcmp(t->tok[1], "imu") == 0;
     }
     if (strcmp(w, "mode") == 0)  { o->kind = UMB_CC_MODE; return parse_mode(t, o); }
     if (strcmp(w, "get") == 0)   { o->kind = UMB_CC_GET;  return t->count == 2 && copy_key(t->tok[1], o); }

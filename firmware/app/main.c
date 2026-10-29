@@ -1,4 +1,4 @@
-/* main.c - boot: settings, neutral PWM, tachometer, shared state, tasks, scheduler. */
+/* main.c - boot: settings, neutral PWM, tachometer, shared state, I2C buses, tasks, scheduler. */
 #include <stdio.h>
 #include "FreeRTOS.h"
 #include "task.h"
@@ -7,9 +7,12 @@
 #include "console_task.h"
 #include "control_task.h"
 #include "hal_flash_store.h"
+#include "hal_i2c.h"
 #include "hal_pwm.h"
 #include "hal_tach.h"
+#include "sensors_task.h"
 #include "shared_state.h"
+#include "ui_task.h"
 #include "umb_settings.h"
 
 void vApplicationMallocFailedHook(void) {
@@ -44,11 +47,17 @@ int main(void) {
     hal_tach_init(settings.tach_glitch_filter_us);
     shared_init(&settings);
     stdio_init_all();
+    hal_i2c_init();                           /* bus mutexes, before any task uses a bus */
+    sensors_init();
 
     create_pinned(control_task, "control", CONTROL_TASK_STACK_WORDS, NULL,
                   CONTROL_TASK_PRIORITY, CONTROL_TASK_CORE_MASK);
     create_pinned(console_task, "console", CONSOLE_TASK_STACK_WORDS, (void *)reason,
                   CONSOLE_TASK_PRIORITY, CONSOLE_TASK_CORE_MASK);
+    /* Core 1: control (highest) > IMU > ToF > UI. Sensor bring-up runs inside the tasks. */
+    create_pinned(imu_task, "imu", IMU_TASK_STACK_WORDS, NULL, IMU_TASK_PRIORITY, SENSORS_TASK_CORE_MASK);
+    create_pinned(tof_task, "tof", TOF_TASK_STACK_WORDS, NULL, TOF_TASK_PRIORITY, SENSORS_TASK_CORE_MASK);
+    create_pinned(ui_task, "ui", UI_TASK_STACK_WORDS, NULL, UI_TASK_PRIORITY, UI_TASK_CORE_MASK);
     vTaskStartScheduler();
     panic("scheduler returned");
 }

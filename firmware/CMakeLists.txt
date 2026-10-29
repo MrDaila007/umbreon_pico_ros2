@@ -50,6 +50,7 @@ foreach(var UMB_SSID UMB_PASS)
 endforeach()
 
 file(GLOB CORE_SRCS CONFIGURE_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/core/*.c)
+file(GLOB DRIVER_SRCS CONFIGURE_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/drivers/*.c)
 set(FW_SRCS
     hal/hal_pwm.c
     hal/hal_tach.c
@@ -64,10 +65,12 @@ set(FW_SRCS
     app/control_task.c
     app/console_task.c
     app/console_cmds.c
+    app/sensors_task.c
+    app/ui_task.c
     app/main.c)
 
-add_executable(umbreon_pico_ros2 ${FW_SRCS} ${CORE_SRCS})
-set_source_files_properties(${FW_SRCS} ${CORE_SRCS} PROPERTIES
+add_executable(umbreon_pico_ros2 ${FW_SRCS} ${CORE_SRCS} ${DRIVER_SRCS})
+set_source_files_properties(${FW_SRCS} ${CORE_SRCS} ${DRIVER_SRCS} PROPERTIES
     COMPILE_OPTIONS "-Wall;-Wextra;-Werror")
 target_include_directories(umbreon_pico_ros2 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}

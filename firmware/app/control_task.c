@@ -9,6 +9,7 @@
 #include "shared_state.h"
 #include "umb_arming.h"
 #include "umb_control.h"
+#include "umb_imu_filter.h"
 
 /* Hands one queued arm request to the arming state machine. */
 static umb_arming_t apply_arm_request(umb_arming_t a, int kind) {
@@ -26,8 +27,26 @@ typedef struct {
     bool have_cmd;
 } cmd_state_t;
 
-/* Reads the clock only after the command / beat snapshots, so neither can be
- * stamped later than now_ms by core 0 in between. */
+/* imu_ok only while the snapshot's sample is fresh: a stalled IMU task must not
+ * leave a stale "ok" behind. Signed age; a future stamp counts as fresh. */
+static bool imu_fresh(const shared_sensors_t *sn, uint32_t now_ms) {
+    return sn->imu_ok && (int32_t)(now_ms - sn->imu_stamp_ms) <= (int32_t)UMB_IMU_STALE_MS;
+}
+
+static void fill_sensors(umb_sensor_in_t *si, const shared_sensors_t *sn, uint32_t now_ms) {
+    si->tof_present = true;
+    memcpy(si->tof_mm, sn->tof_mm, sizeof si->tof_mm);
+    si->tof_online = sn->tof_online;
+    si->tof_recovering = sn->tof_recovering;
+    si->imu_present = true;
+    si->imu_ok = imu_fresh(sn, now_ms);
+    memcpy(si->accel_g, sn->accel_g, sizeof si->accel_g);
+    si->bat_present = sn->bat_have;
+    si->battery_v = sn->bat_v;
+}
+
+/* Reads the clock only after the command / beat / sensor snapshots, so none can be
+ * stamped later than now_ms by another task in between. */
 static umb_control_in_t gather_inputs(cmd_state_t *cs) {
     umb_cmd_t fresh;
     if (shared_take_cmd(&fresh)) {
@@ -35,10 +54,13 @@ static umb_control_in_t gather_inputs(cmd_state_t *cs) {
         cs->have_cmd = true;
     }
     uint32_t core0_beat_ms = shared_core0_beat_ms();
+    shared_sensors_t sn;
+    shared_get_sensors(&sn);
     umb_control_in_t in;
-    memset(&in, 0, sizeof in);   /* Plan 1: every sensor *_present = false */
+    memset(&in, 0, sizeof in);
     in.cmd = cs->cmd;
     in.safety.now_ms = hal_now_ms();
+    fill_sensors(&in.sensors, &sn, in.safety.now_ms);
     in.safety.have_cmd = cs->have_cmd;
     in.safety.last_cmd_ms = cs->cmd.rx_ms;
     in.safety.source = cs->cmd.source;
