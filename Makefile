@@ -9,10 +9,17 @@ image:
 	docker compose -f docker/compose.yml build fw-build
 
 test:
-	$(DC) bash -c 'cmake -S tests/host -B $(HOST_BUILD) -G Ninja >/dev/null \
-	  && cmake --build $(HOST_BUILD) \
-	  && find $(HOST_BUILD) -name "*.gcda" -delete \
-	  && rc=0; for t in $(HOST_BUILD)/test_*; do [ -x "$$t" ] && { echo "== $$t"; "$$t" || rc=1; }; done; exit $$rc'
+	$(DC) bash -c 'set -e; \
+	  cmake -S tests/host -B $(HOST_BUILD) -G Ninja >/dev/null; \
+	  cmake --build $(HOST_BUILD); \
+	  find $(HOST_BUILD) -name "*.gcda" -delete; \
+	  rc=0; n=0; \
+	  for t in $(HOST_BUILD)/test_*; do \
+	    [ -f "$$t" ] && [ -x "$$t" ] || continue; \
+	    n=$$((n+1)); echo "== $$t"; "$$t" || rc=1; \
+	  done; \
+	  [ $$n -gt 0 ] || { echo "no host tests found" >&2; exit 1; }; \
+	  exit $$rc'
 
 coverage: test
 	$(DC) bash -c 'if ls firmware/core/*.c >/dev/null 2>&1; then \
