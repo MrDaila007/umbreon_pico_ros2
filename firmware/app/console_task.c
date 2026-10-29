@@ -11,7 +11,6 @@
 
 #define LINE_MAX 160u
 #define POLL_MS 5u
-#define BEAT_MS 100u
 
 typedef struct {
     stdio_driver_t *drv;
@@ -65,7 +64,7 @@ static void run_repeat(console_repeat_t *rep, uint32_t now) {
     if ((int32_t)(now - rep->end_ms) >= 0) { rep->active = false; return; }
     if ((int32_t)(now - rep->next_ms) < 0) return;
     rep->cmd.rx_ms = now;
-    shared_post_cmd(&rep->cmd);
+    if (!shared_post_cmd(&rep->cmd)) rep->active = false;
     rep->next_ms = now + CONSOLE_REPEAT_MS;
 }
 
@@ -74,15 +73,9 @@ void console_task(void *param) {
     line_src_t usb = { .drv = &stdio_usb, .origin = CONSOLE_ORIGIN_USB };
     line_src_t uart = { .drv = &stdio_uart, .origin = CONSOLE_ORIGIN_UART };
     console_repeat_t rep = { 0 };
-    uint32_t next_beat = hal_now_ms();
     printf("\numbreon_pico_ros2 console ready; type 'help'\n");
 
     for (;;) {
-        uint32_t now = hal_now_ms();
-        if ((int32_t)(now - next_beat) >= 0) {
-            shared_core0_beat(now);
-            next_beat = now + BEAT_MS;
-        }
         poll_source(&usb, &rep);
         poll_source(&uart, &rep);
         run_repeat(&rep, hal_now_ms());

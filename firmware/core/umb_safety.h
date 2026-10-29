@@ -12,6 +12,7 @@ enum {
     UMB_STOP_WIFI        = 1u << 2,
     UMB_STOP_REFLEX      = 1u << 3, /* set by umb_control from umb_reflex, never here */
     UMB_STOP_CORE0       = 1u << 4,
+    UMB_STOP_MAINTENANCE = 1u << 6, /* shared maintenance reservation */
     UMB_STOP_NO_CMD      = 1u << 5
 };
 

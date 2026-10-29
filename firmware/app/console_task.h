@@ -1,5 +1,5 @@
 /* console_task.h - line console on USB CDC and UART0 (GP16/17, 115200), pinned to core 0.
- * Also beats the core-0 heartbeat the control task watches. */
+ * Network task owns the core-0 heartbeat; console responsiveness cannot mask it. */
 #pragma once
 #include "FreeRTOS.h"
 

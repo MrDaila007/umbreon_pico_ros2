@@ -74,6 +74,8 @@ set(FW_SRCS
     hal/hal_adc.c
     hal/hal_buzzer.c
     hal/hal_encoder.c
+    app/settings_apply.c
+    app/net_task.c
     app/shared_state.c
     app/control_task.c
     app/console_task.c

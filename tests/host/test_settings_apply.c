@@ -1,0 +1,68 @@
+#include "test_runner.h"
+#include "settings_apply.h"
+#include "shared_state.h"
+#include "hal_flash_store.h"
+#include "hal_time.h"
+#include "FreeRTOS.h"
+#include "task.h"
+static uint32_t clock_ms;
+static bool give_ack, flash_ok, rejected_arm, rejected_settings;
+static int flash_calls;
+uint32_t hal_now_ms(void) { return clock_ms; }
+TickType_t xTaskGetTickCount(void) { return clock_ms; }
+void vTaskDelay(TickType_t ticks) {
+    clock_ms += ticks;
+    if (give_ack) {
+        shared_control_mailbox_t box; shared_take_control_mailbox(&box);
+        if (box.maintenance) shared_ack_maintenance(box.maintenance_id);
+    }
+}
+bool hal_settings_save(const umb_settings_t *s) {
+    (void)s; flash_calls++;
+    rejected_arm = !shared_post_arm_request(SHARED_ARM_CAR);
+    umb_settings_t settings; uint32_t revision = shared_settings_snapshot(&settings);
+    rejected_settings = !shared_commit_settings(&settings, revision, false);
+    return flash_ok;
+}
+static void setup(void) {
+    clock_ms = flash_calls = 0; give_ack = flash_ok = true;
+    rejected_arm = rejected_settings = false;
+    umb_settings_t s = umb_settings_defaults(); shared_init(&s);
+}
+TEST(test_save_waits_for_neutral_and_blocks_racing_producers) {
+    setup();
+    ASSERT_EQ(settings_save_current(), SETTINGS_SAVE_OK);
+    ASSERT_EQ(flash_calls, 1);
+    ASSERT_TRUE(clock_ms > 0);
+    ASSERT_TRUE(rejected_arm);
+    ASSERT_TRUE(rejected_settings);
+    ASSERT_TRUE(shared_settings_write_allowed());
+}
+TEST(test_save_ack_timeout_never_touches_flash_and_releases) {
+    setup(); give_ack = false;
+    ASSERT_EQ(settings_save_current(), SETTINGS_SAVE_NEUTRAL_TIMEOUT);
+    ASSERT_EQ(flash_calls, 0);
+    ASSERT_EQ(clock_ms, 60);
+    ASSERT_TRUE(shared_settings_write_allowed());
+}
+TEST(test_save_failure_releases_reservation) {
+    setup(); flash_ok = false;
+    ASSERT_EQ(settings_save_current(), SETTINGS_SAVE_FLASH_FAILED);
+    ASSERT_EQ(flash_calls, 1);
+    ASSERT_TRUE(shared_settings_write_allowed());
+}
+TEST(test_save_armed_or_queued_refused_without_flash) {
+    setup(); umb_outputs_t o = {.armed = true}; shared_publish_outputs(&o);
+    ASSERT_EQ(settings_save_current(), SETTINGS_SAVE_BUSY);
+    ASSERT_EQ(flash_calls, 0);
+    setup(); shared_post_arm_request(SHARED_ARM_CAR);
+    ASSERT_EQ(settings_save_current(), SETTINGS_SAVE_BUSY);
+    ASSERT_EQ(flash_calls, 0);
+}
+int main(void) {
+    RUN_TEST(test_save_waits_for_neutral_and_blocks_racing_producers);
+    RUN_TEST(test_save_ack_timeout_never_touches_flash_and_releases);
+    RUN_TEST(test_save_failure_releases_reservation);
+    RUN_TEST(test_save_armed_or_queued_refused_without_flash);
+    TEST_SUMMARY();
+}

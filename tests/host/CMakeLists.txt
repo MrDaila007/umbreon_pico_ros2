@@ -54,3 +54,21 @@ target_include_directories(test_shared_state PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/task_stubs
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)
+
+# Run the real control loop/mailboxes against simulated time, PWM and watchdog.
+target_sources(test_control_task PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/control_task.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/shared_state.c)
+target_include_directories(test_control_task PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/task_stubs
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)
+
+# Persistence coordinator with fake flash; never writes hardware in host tests.
+target_sources(test_settings_apply PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/settings_apply.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/shared_state.c)
+target_include_directories(test_settings_apply PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/task_stubs
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)

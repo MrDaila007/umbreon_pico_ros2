@@ -387,7 +387,47 @@ TEST(test_control_no_command_stops) {
     ASSERT_EQ(h.out.mode, UMB_DRIVE_MANUAL);
 }
 
+TEST(test_control_persistent_agent_loss_cannot_rearm) {
+    harness_t h; h_init(&h); h.source = UMB_SRC_ROS; h.agent_up = false;
+    h_raw(&h, 0.0f);
+    h.s.arming = umb_arming_car_key(h.s.arming, NULL);
+    h.s.arming = umb_arming_ros(h.s.arming, true, NULL);
+    h_raw(&h, 0.0f);
+    ASSERT_FALSE(h.out.armed);
+    ASSERT_FALSE(h.s.arming.car_key);
+    ASSERT_FALSE(h.s.arming.ros_key);
+}
+
+TEST(test_control_loss_event_disarms_console_and_partial_keys) {
+    harness_t h; h_init(&h); h_arm(&h);
+    umb_control_in_t in = h_input(&h, UMB_CMD_RAW, UMB_DRIVE_MANUAL, 0.0f, 0.5f, true);
+    in.network_loss_mask = UMB_STOP_AGENT;
+    h.s = umb_control_step(h.s, &in, &h.c, &h.out);
+    ASSERT_EQ(h.out.esc_us, 1500);
+    ASSERT_FALSE(h.out.armed);
+    ASSERT_FALSE(h.s.arming.neutral_seen);
+    h.s.arming = umb_arming_car_key(h.s.arming, NULL);
+    in.safety.have_cmd = false;
+    h.s = umb_control_step(h.s, &in, &h.c, &h.out);
+    ASSERT_FALSE(h.s.arming.car_key);
+}
+
+TEST(test_control_maintenance_inhibits_none_mode) {
+    harness_t h; h_init(&h); h.c.arming_mode = UMB_ARM_NONE;
+    h_raw(&h, 0.0f);
+    umb_control_in_t in = h_input(&h, UMB_CMD_RAW, UMB_DRIVE_MANUAL, 0.7f, 0.5f, true);
+    in.maintenance = true;
+    h.s = umb_control_step(h.s, &in, &h.c, &h.out);
+    ASSERT_EQ(h.out.esc_us, 1500);
+    ASSERT_EQ(h.out.servo_us, 1500);
+    ASSERT_FALSE(h.out.motion_allowed);
+    ASSERT_FALSE(h.s.arming.neutral_seen);
+}
+
 int main(void) {
+    RUN_TEST(test_control_persistent_agent_loss_cannot_rearm);
+    RUN_TEST(test_control_loss_event_disarms_console_and_partial_keys);
+    RUN_TEST(test_control_maintenance_inhibits_none_mode);
     RUN_TEST(test_control_boot_outputs_neutral);
     RUN_TEST(test_control_raw_drive_after_arm_and_neutral);
     RUN_TEST(test_control_needs_neutral_after_arm);

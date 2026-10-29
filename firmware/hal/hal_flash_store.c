@@ -2,7 +2,6 @@
 #include "hal_flash_store.h"
 #include <string.h>
 #include "hardware/flash.h"
-#include "hardware/watchdog.h"
 #include "pico/error.h"
 #include "pico/flash.h"
 #include "pico/platform.h"
@@ -50,9 +49,8 @@ bool hal_settings_save(const umb_settings_t *s) {
     if (umb_settings_encode(s, seq, s_buf, sizeof s_buf) == 0u) return false;
 
     write_job_t job = { slot_offset(target), s_buf };
-    /* The control loop (watchdog feeder) is paused while flash is busy;
-     * start the erase with a full watchdog period. */
-    watchdog_update();
+    /* Caller holds the maintenance reservation and has the control task's neutral
+     * ACK after its watchdog feed. Never feed the watchdog from the flash path. */
     if (flash_safe_execute(write_sector, &job, FLASH_LOCKOUT_TIMEOUT_MS) != PICO_OK) return false;
 
     umb_settings_t check;

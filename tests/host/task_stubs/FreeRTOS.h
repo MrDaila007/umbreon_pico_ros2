@@ -1,4 +1,5 @@
 #pragma once
+#define INC_FREERTOS_H
 #include <assert.h>
 #include <stdint.h>
 typedef uint32_t TickType_t;

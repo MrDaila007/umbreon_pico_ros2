@@ -29,6 +29,8 @@ typedef struct {
     umb_sensor_in_t sensors;
     uint32_t tach_count;
     uint32_t tach_age_us;
+    uint32_t network_loss_mask; /* latched event, independent of the latest command source */
+    bool maintenance;          /* flash/setup reservation: inhibit motion in every mode */
 } umb_control_in_t;
 
 typedef struct {

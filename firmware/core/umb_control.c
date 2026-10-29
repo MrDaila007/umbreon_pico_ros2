@@ -108,7 +108,9 @@ static drive_t drive(umb_control_t *s, const umb_control_in_t *in, const umb_ref
 static umb_control_t update_safety(umb_control_t s, const umb_control_in_t *in, umb_drive_mode_t mode,
                                    const umb_settings_t *c, uint32_t *mask_out, umb_reflex_out_t *rx) {
     bool have = in->safety.have_cmd;
-    uint32_t mask = umb_safety_evaluate(&in->safety, c);
+    uint32_t mask = umb_safety_evaluate(&in->safety, c) |
+                    (in->network_loss_mask & UMB_STOP_DISARM_MASK);
+    if (in->maintenance) mask |= UMB_STOP_MAINTENANCE;
 
     /* While stalled, keep the latch until a neutral command (no stop / retry cycling). */
     bool hold_stall = s.reflex.stall_latched && have && !cmd_is_neutral(&in->cmd);
@@ -117,8 +119,8 @@ static umb_control_t update_safety(umb_control_t s, const umb_control_in_t *in, 
                                in->tach_age_us, in->safety.now_ms, c, rx);
     if (rx->stop) mask |= UMB_STOP_REFLEX;
 
-    uint32_t newly = mask & ~s.stop_mask;
-    if ((newly & UMB_STOP_DISARM_MASK) || rx->disarm) s.arming = umb_arming_disarm(s.arming);
+    /* A new key request while the link is still down must not revive arming. */
+    if ((mask & UMB_STOP_DISARM_MASK) || in->maintenance || rx->disarm) s.arming = umb_arming_disarm(s.arming);
     if (mask != 0u) {
         /* A stopped car needs a fresh neutral command; a command received
          * during (or before) the stop must not count as that neutral. */

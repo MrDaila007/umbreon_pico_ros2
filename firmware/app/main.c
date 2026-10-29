@@ -9,6 +9,7 @@
 #include "hal_flash_store.h"
 #include "hal_i2c.h"
 #include "hal_pwm.h"
+#include "net_task.h"
 #include "hal_tach.h"
 #include "sensors_task.h"
 #include "shared_state.h"
@@ -54,6 +55,8 @@ int main(void) {
                   CONTROL_TASK_PRIORITY, CONTROL_TASK_CORE_MASK);
     create_pinned(console_task, "console", CONSOLE_TASK_STACK_WORDS, (void *)reason,
                   CONSOLE_TASK_PRIORITY, CONSOLE_TASK_CORE_MASK);
+    create_pinned(net_task, "net", NET_TASK_STACK_WORDS, NULL,
+                  NET_TASK_PRIORITY, NET_TASK_CORE_MASK);
     /* Core 1: control (highest) > IMU > ToF > UI. Sensor bring-up runs inside the tasks. */
     create_pinned(imu_task, "imu", IMU_TASK_STACK_WORDS, NULL, IMU_TASK_PRIORITY, SENSORS_TASK_CORE_MASK);
     create_pinned(tof_task, "tof", TOF_TASK_STACK_WORDS, NULL, TOF_TASK_PRIORITY, SENSORS_TASK_CORE_MASK);

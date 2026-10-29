@@ -10,6 +10,7 @@
 #include "pico/stdio_usb.h"
 #include "hal_flash_store.h"
 #include "shared_state.h"
+#include "settings_apply.h"
 #include "umb_console_parse.h"
 #include "umb_gear.h"
 #include "umb_reflex.h"
@@ -28,7 +29,7 @@ static const char *const GEAR_NAMES[] = { "neutral", "forward", "wait_stop", "br
 static const char *const TOF_LABELS[UMB_TOF_COUNT] = { "HR", "FR", "R", "L", "FL", "HL" };
 static const char *const ENCODER_STATES[] = { "starting", "ok", "FAILED (keys disabled)" };
 static const char *const STACK_TASKS[] = { "control", "console", "imu", "tof", "ui" };
-static const char *const STOP_NAMES[] = { "cmd_timeout", "agent", "wifi", "reflex", "core0", "no_cmd" };
+static const char *const STOP_NAMES[] = { "cmd_timeout", "agent", "wifi", "reflex", "core0", "no_cmd", "maintenance" };
 
 void console_cmds_init(const char *reset_reason) {
     if (reset_reason) s_reset_reason = reset_reason;
@@ -138,7 +139,7 @@ static void print_help(void) {
            "  get <key> | set <key> <value> | defaults | save\n"
            "  wifi set <ssid> <pass> | agent set <ip|discover> <port>\n"
            "  reboot\n"
-           "set/defaults/wifi/agent/save are refused while driving (motion allowed, no stop);\n"
+           "set/defaults/wifi/agent/save require disarmed and idle;\n"
            "save is also refused while armed; mode is always allowed (it disarms)\n"
            "[ms] defaults to 1000, max 3000\n");
 }
@@ -160,7 +161,7 @@ static void start_drive(const umb_console_cmd_t *cc, console_origin_t origin,
     c.mode = (cc->kind == UMB_CC_AUTO) ? UMB_DRIVE_AUTO : UMB_DRIVE_MANUAL;
     c.steer = cc->steer;
     c.value = cc->value;
-    shared_post_cmd(&c);
+    if (!shared_post_cmd(&c)) { printf("refused: busy\n"); return; }
     rep->cmd = c;
     rep->origin = origin;
     rep->active = true;
@@ -179,7 +180,7 @@ static void stop_now(console_repeat_t *rep, uint32_t now_ms) {
 }
 
 static void arm_request(int kind) {
-    shared_post_arm_request(kind);
+    if (!shared_post_arm_request(kind)) { printf("refused: busy\n"); return; }
     vTaskDelay(pdMS_TO_TICKS(ARM_SETTLE_MS));
     umb_outputs_t o;
     umb_arming_t a;
@@ -197,16 +198,18 @@ static bool driving(void) {
 }
 
 /* Applies up to two key=value edits to a copy of the settings and publishes it.
- * gated: refuse while driving (every edit except `mode`, which always disarms). */
+ * All ordinary edits require disarmed state; `mode` is a disarming-only transaction. */
 static void edit_settings(bool gated, const char *k1, const char *v1, const char *k2, const char *v2) {
     if (gated && driving()) { printf("refused: driving\n"); return; }
     umb_settings_t s;
-    shared_get_settings(&s);
+    uint32_t revision = shared_settings_snapshot(&s);
     if (!umb_settings_set_kv(&s, k1, v1, &s) || (k2 && !umb_settings_set_kv(&s, k2, v2, &s))) {
         printf("error: invalid key or value\n");
         return;
     }
-    shared_set_settings(&s);
+    if (!shared_commit_settings(&s, revision, !gated)) {
+        printf("refused: armed or busy\n"); return;
+    }
     printf("ok (not saved; run save)\n");
 }
 
@@ -220,19 +223,25 @@ static void get_setting(const char *key) {
 
 static void restore_defaults(void) {
     if (driving()) { printf("refused: driving\n"); return; }
+    umb_settings_t current;
+    uint32_t revision = shared_settings_snapshot(&current);
     umb_settings_t d = umb_settings_defaults();
-    shared_set_settings(&d);
+    if (!shared_commit_settings(&d, revision, false)) {
+        printf("refused: armed or busy\n"); return;
+    }
     printf("ok: defaults loaded (not saved; run save)\n");
 }
 
 static void save_settings(void) {
     if (driving()) { printf("refused: driving\n"); return; }
-    if (!shared_settings_write_allowed()) { printf("refused: armed\n"); return; }
-    umb_settings_t s;
-    shared_get_settings(&s);
-    if (hal_settings_save(&s))
+    switch (settings_save_current()) {
+    case SETTINGS_SAVE_BUSY: printf("refused: armed or busy\n"); break;
+    case SETTINGS_SAVE_NEUTRAL_TIMEOUT: printf("error: neutral acknowledgement timeout\n"); break;
+    case SETTINGS_SAVE_FLASH_FAILED: printf("error: save failed\n"); break;
+    case SETTINGS_SAVE_OK:
         printf("ok: saved to slot %d (seq %lu)\n", hal_settings_slot(), (unsigned long)hal_settings_seq());
-    else printf("error: save failed\n");
+        break;
+    }
 }
 
 static void reboot_now(void) {

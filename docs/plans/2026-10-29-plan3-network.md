@@ -1,7 +1,8 @@
 # Umbreon Pico 2 W — Plan 3: WiFi and micro-ROS
 
 Date: 2026-10-29
-Status: ready for implementation; no Plan 3 firmware changes have been made.
+Status: implementation in progress. Task1 complete; Task2 coordination implemented,
+with real flash/watchdog timing acceptance still open. ROS networking is not live yet.
 
 **Goal:** the existing Pico 2 W firmware joins WiFi or starts its own AP, reconnects
 to a Jazzy micro-ROS Agent, publishes the agreed telemetry and accepts ROS
@@ -351,21 +352,24 @@ check script, `docs/ros-interface.md` initial graph/budget.
 
 ## Task 2: Close shared-state and control safety gaps
 
+**Software status:** see `docs/validation/plan3-task2.md`. The flash latency/margin
+item below remains open and must be resolved in Task11.
+
 **Files:** shared_state, control_task, umb_control/safety, console task/handlers,
 flash HAL and their host integration tests.
 
-- [ ] Write failing tests: a console beat cannot hide a hung net task; ROS stream
+- [x] Write failing tests: a console beat cannot hide a hung net task; ROS stream
   timeout stops at the configured boundary; loss clears partial BOTH keys even
   if the last command was console or no ROS command ever arrived; a down/up within
   one control tick is still consumed; generation N commands/arm requests cannot
   run after reconnect to N+1; disarm cannot be dropped by a full queue.
-- [ ] Implement sticky loss/disarm and request-ID ACKs. Preserve offline console
+- [x] Implement sticky loss/disarm and request-ID ACKs. Preserve offline console
   usability and distinguish boot-offline from a real session/mode loss. While a
   loss bit is active, new arm requests must not revive keys behind that bit.
-- [ ] Make net_task the heartbeat writer at final wiring; temporarily provide a
+- [x] Make net_task the heartbeat writer at final wiring; temporarily provide a
   deliberate build-time stub only if needed to keep intermediate firmware bootable.
   Never ship two heartbeat writers.
-- [ ] Add a maintenance reservation with neutral ACK and atomic settings updates.
+- [x] Add a maintenance reservation with neutral ACK and atomic settings updates.
   Test encoder/ROS arm races, simultaneous console/ROS edits, missing ACK, flash
   failure and cleanup. Reservation releases on every error, neutral latch stays
   cleared; all arm/command paths must obey it, including `mode none` in host tests.
@@ -374,7 +378,7 @@ flash HAL and their host integration tests.
   period with explicit measured margin; remove the flash HAL's independent
   `watchdog_update()` so control remains the feeder. Do not feed watchdog from
   network code to mask blocked control.
-- [ ] Run host tests + coverage, firmware compile; commit
+- [x] Run host tests + coverage, firmware compile; commit
   `fix: isolate network liveness and latch loss across command sources`.
 
 ## Task 3: Pure WiFi/session FSM and AP identity policy
