@@ -19,7 +19,9 @@ class ContractTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.write(contract.HEADERS[0], '#define RMW_UXRCE_TRANSPORT_CUSTOM\n' + '\n'.join(
             f'#define {key} {value}' for key, value in contract.LIMITS.items()))
-        self.write(contract.HEADERS[1], '#define UXR_CONFIG_CUSTOM_TRANSPORT_MTU 1200\n')
+        self.write(contract.HEADERS[1], '#define UXR_CONFIG_CUSTOM_TRANSPORT_MTU 1200\n'
+                   '#define UXR_CONFIG_MAX_SESSION_CONNECTION_ATTEMPTS 3\n'
+                   '#define UXR_CONFIG_MIN_SESSION_CONNECTION_INTERVAL 50\n')
         self.write(contract.HEADERS[2], '#define RCLC_EXECUTOR_PARAMETER_SERVER_HANDLES 6\n')
         (self.root / 'libmicroros.a').write_bytes(b'synthetic archive for hash tests')
         syms = [f'rosidl_typesupport_microxrcedds_c__get_message_type_support_handle__{p}__msg__{n}'
@@ -44,6 +46,14 @@ class ContractTests(unittest.TestCase):
     def test_old_mtu_rejected(self):
         self.write(contract.HEADERS[1], '#define UXR_CONFIG_CUSTOM_TRANSPORT_MTU 512\n')
         self.assertTrue(any('MTU' in e for e in contract.check(self.root, 'nm', True)))
+
+    def test_unbounded_session_open_rejected(self):
+        self.write(contract.HEADERS[1], '#define UXR_CONFIG_CUSTOM_TRANSPORT_MTU 1200\n'
+                   '#define UXR_CONFIG_MAX_SESSION_CONNECTION_ATTEMPTS 10\n'
+                   '#define UXR_CONFIG_MIN_SESSION_CONNECTION_INTERVAL 1000\n')
+        errors = contract.check(self.root, 'nm', True)
+        self.assertTrue(any('SESSION_CONNECTION_ATTEMPTS' in e for e in errors))
+        self.assertTrue(any('SESSION_CONNECTION_INTERVAL' in e for e in errors))
 
     def test_old_entity_limits_rejected(self):
         p = self.root / 'include' / contract.HEADERS[0]

@@ -28,6 +28,9 @@ Comparison against a real pico-sdk `pico2_w` object is deferred to Task 3.
 
 ## Production resource gate (Plan 3)
 
+The production archive bounds the XRCE session open to 3 attempts x 50 ms
+(`UCLIENT_MAX_SESSION_CONNECTION_ATTEMPTS`/`UCLIENT_MIN_SESSION_CONNECTION_INTERVAL`;
+pinned default 10 x 1000 ms) so `rcl_init` cannot stall the core-0 network task.
 The production archive uses custom MTU1200 and capacity1 node/16 publishers/
 4 subscriptions/10 services/0 clients/history4. `make microros` builds in an
 ignored candidate directory, verifies generated headers, required type-support

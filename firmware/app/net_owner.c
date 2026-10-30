@@ -182,7 +182,8 @@ static void run_session(net_owner_t *o, bool up, bool may_block) {
         .endpoint_selected = o->endpoint.policy.selected && o->client_key != 0,
         .endpoint = {o->endpoint.policy.selected_ip, o->active.agent_port,
                      o->active.ros_domain_id, o->client_key},
-        .generation = shared_session_generation()};
+        .generation = shared_session_generation(),
+        .open_allowed = radio_ops_allowed()}; /* never open a session while armed */
     ros_session_out_t out = ros_session_step(&o->session, &in, o->ros);
     set_link(o, up); /* publishes agent_up = ready; a dropped session latches loss here */
     if (out.teardown) (void)ros_session_teardown(&o->session, o->ros);

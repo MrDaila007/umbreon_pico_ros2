@@ -36,7 +36,9 @@
                 "-DUCLIENT_PROFILE_SERIAL=OFF",
                 "-DUCLIENT_PROFILE_STREAM_FRAMING=ON",
                 "-DUCLIENT_PROFILE_CUSTOM_TRANSPORT=ON",
-                "-DUCLIENT_CUSTOM_TRANSPORT_MTU=1200"
+                "-DUCLIENT_CUSTOM_TRANSPORT_MTU=1200",
+                "-DUCLIENT_MAX_SESSION_CONNECTION_ATTEMPTS=3",
+                "-DUCLIENT_MIN_SESSION_CONNECTION_INTERVAL=50"
             ]
         },
         "rmw_microxrcedds": {

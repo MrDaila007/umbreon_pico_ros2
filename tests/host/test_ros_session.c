@@ -16,7 +16,8 @@ static unsigned teardowns_requested, ready_steps;
 static void setup(void) {
     fake_ros_reset(&f); b = fake_ros_backend(&f); ros_session_init(&s);
     in = (ros_session_in_t){.now_ms = 1000, .link_up = true, .endpoint_selected = true,
-                            .endpoint = {0x0a000005u, 8888, 3, 0x1234abcdu}, .generation = GEN};
+                            .endpoint = {0x0a000005u, 8888, 3, 0x1234abcdu}, .generation = GEN,
+                            .open_allowed = true};
     teardowns_requested = ready_steps = 0;
 }
 /* One owner iteration: loss is "latched" before teardown, like net_owner. */
@@ -47,7 +48,12 @@ TEST(test_ready_only_after_all_entities_and_executor) {
     ASSERT_EQ(f.generation, GEN); ASSERT_EQ(s.generation, GEN); ASSERT_EQ(f.session_starts, 1);
     ASSERT_EQ(f.last_cfg.client_key, 0x1234abcdu); ASSERT_EQ(f.last_cfg.domain_id, 3);
     ASSERT_EQ(f.last_cfg.agent_ip, 0x0a000005u); ASSERT_EQ(f.last_cfg.agent_port, 8888);
-    ASSERT_EQ(s.sessions, 1); ASSERT_EQ(f.spins, 1); /* executor runs from the ready step */
+    ASSERT_EQ(s.sessions, 1);
+    /* No spin in the step that became ready: the owner publishes agent_up first,
+     * so nothing delivered in the first spin is refused as "not ready". */
+    ASSERT_EQ(f.spins, 0);
+    ASSERT_EQ(f.service_reply_timeout_ms, 20); /* contract bound applied to /umbreon/arm */
+    step(); ASSERT_EQ(f.spins, 1);
     run(50); ASSERT_TRUE(out.ready); ASSERT_EQ(teardowns_requested, 0); ASSERT_EQ(f.creates, ROS_ENT_COUNT);
     ASSERT_TRUE(f.pings >= 4);
 }
@@ -149,6 +155,22 @@ TEST(test_forced_teardown_is_idempotent_and_repeated_cycles_balanced) {
     ASSERT_EQ(s.sessions, 100);
 }
 
+TEST(test_session_open_never_attempted_while_armed) {
+    setup(); in.open_allowed = false;
+    run(300);
+    ASSERT_FALSE(out.ready); ASSERT_EQ(f.live, 0);
+    for (unsigned i = 0; i < f.len; i++) ASSERT_TRUE(!(f.op[i] == 'c' && f.id[i] == ROS_ENT_CONTEXT));
+    /* Armed after the local init step but before the open: torn down, no open. */
+    in.open_allowed = true;
+    for (unsigned guard = 0; !(f.live & (1u << ROS_ENT_INIT_OPTIONS)) && guard < 400; guard++) step();
+    ASSERT_TRUE(f.live & (1u << ROS_ENT_INIT_OPTIONS)); ASSERT_FALSE(f.live & (1u << ROS_ENT_CONTEXT));
+    in.open_allowed = false; run(50);
+    ASSERT_EQ(f.live, 0); ASSERT_FALSE(f.transport_open);
+    for (unsigned i = 0; i < f.len; i++) ASSERT_TRUE(!(f.op[i] == 'c' && f.id[i] == ROS_ENT_CONTEXT));
+    /* A live session is not dropped by arming: the gate only covers opening. */
+    in.open_allowed = true; ASSERT_TRUE(reach_ready(300));
+    in.open_allowed = false; run(50); ASSERT_TRUE(out.ready);
+}
 int main(void) {
     RUN_TEST(test_ready_only_after_all_entities_and_executor);
     RUN_TEST(test_failure_at_each_step_cleans_up_and_recovers_fresh);
@@ -158,5 +180,6 @@ int main(void) {
     RUN_TEST(test_link_or_endpoint_change_drops_and_reconnects_with_new_endpoint);
     RUN_TEST(test_unreleased_socket_blocks_recreate_until_released);
     RUN_TEST(test_forced_teardown_is_idempotent_and_repeated_cycles_balanced);
+    RUN_TEST(test_session_open_never_attempted_while_armed);
     TEST_SUMMARY();
 }

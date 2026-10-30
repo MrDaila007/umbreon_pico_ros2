@@ -5,7 +5,7 @@ static void record(fake_ros_t *f, char op, int id) {
     if (f->len < FAKE_ROS_LOG) { f->op[f->len] = op; f->id[f->len] = id; f->len++; }
 }
 static bool create(void *ctx, ros_entity_id_t id, const ros_entity_desc_t *d, const ros_session_config_t *cfg) {
-    fake_ros_t *f = ctx; (void)d;
+    fake_ros_t *f = ctx;
     f->creates++; f->last_cfg = *cfg;
     if (f->on_blocking) f->on_blocking(f->user);
     if (id == ROS_ENT_INIT_OPTIONS && f->transport_open) f->creates_while_live_transport++;
@@ -16,6 +16,7 @@ static bool create(void *ctx, ros_entity_id_t id, const ros_entity_desc_t *d, co
     }
     if (id == ROS_ENT_CONTEXT) { f->transport_open = true; if (!f->agent_alive) return false; }
     if (id > ROS_ENT_CONTEXT && !f->agent_alive) return false;
+    if (d->kind == ROS_KIND_SERVICE) f->service_reply_timeout_ms = d->reply_timeout_ms;
     record(f, 'c', (int)id);
     f->live |= 1u << id;
     return true;

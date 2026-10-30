@@ -3,10 +3,10 @@
 #include "ros_entities.h"
 #include <stddef.h>
 
-#define PUB(n, t, i) {ROS_KIND_PUBLISHER, n, t, ROS_QOS_BEST_EFFORT, 1u, ROS_ENT_COUNT, i}
-#define SUB(n, i) {ROS_KIND_SUBSCRIPTION, n, ROS_TYPE_TWIST, ROS_QOS_BEST_EFFORT, ROS_COMMAND_DEPTH, ROS_ENT_COUNT, i}
-#define LOCAL(k) {k, NULL, ROS_TYPE_NONE, ROS_QOS_NONE, 0u, ROS_ENT_COUNT, 0u}
-#define HANDLE(target) {ROS_KIND_EXECUTOR_HANDLE, NULL, ROS_TYPE_NONE, ROS_QOS_NONE, 0u, target, 0u}
+#define PUB(n, t, i) {ROS_KIND_PUBLISHER, n, t, ROS_QOS_BEST_EFFORT, 1u, ROS_ENT_COUNT, i, 0u}
+#define SUB(n, i) {ROS_KIND_SUBSCRIPTION, n, ROS_TYPE_TWIST, ROS_QOS_BEST_EFFORT, ROS_COMMAND_DEPTH, ROS_ENT_COUNT, i, 0u}
+#define LOCAL(k) {k, NULL, ROS_TYPE_NONE, ROS_QOS_NONE, 0u, ROS_ENT_COUNT, 0u, 0u}
+#define HANDLE(target) {ROS_KIND_EXECUTOR_HANDLE, NULL, ROS_TYPE_NONE, ROS_QOS_NONE, 0u, target, 0u, 0u}
 
 /* Topic/service names are absolute so the /umbreon node namespace is not doubled. */
 static const ros_entity_desc_t s_graph[ROS_ENT_COUNT] = {
@@ -29,7 +29,7 @@ static const ros_entity_desc_t s_graph[ROS_ENT_COUNT] = {
     [ROS_ENT_SUB_CMD_TELEOP] = SUB("/umbreon/cmd_teleop", 1u), /* UMB_ROS_CMD_TELEOP */
     [ROS_ENT_SUB_CMD_RAW] = SUB("/umbreon/cmd_raw", 2u),       /* UMB_ROS_CMD_RAW */
     [ROS_ENT_SRV_ARM] = {ROS_KIND_SERVICE, "/umbreon/arm", ROS_TYPE_SET_BOOL, ROS_QOS_RELIABLE,
-                         0u, ROS_ENT_COUNT, 0u},
+                         0u, ROS_ENT_COUNT, 0u, ROS_SERVICE_REPLY_TIMEOUT_MS},
     [ROS_ENT_TIMER] = LOCAL(ROS_KIND_TIMER),
     [ROS_ENT_EXECUTOR] = LOCAL(ROS_KIND_EXECUTOR),
     [ROS_ENT_EXEC_CMD_VEL] = HANDLE(ROS_ENT_SUB_CMD_VEL),

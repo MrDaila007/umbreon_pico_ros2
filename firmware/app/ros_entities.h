@@ -16,6 +16,13 @@
 #define ROS_EXECUTOR_HANDLES (3u + 2u + ROS_PARAM_SERVER_HANDLES + 1u)
 #define ROS_TIMER_PERIOD_MS 10u
 #define ROS_CREATE_TIMEOUT_MS 200u  /* per reliable entity creation; < 500 ms core-0 beat limit */
+/* The node (agent-side DDS participant) is slower to create; still inside one
+ * bounded step well below the 500 ms core-0 stale-beat limit. */
+#define ROS_NODE_CREATE_TIMEOUT_MS 350u
+/* Reliable service response confirm per contract (<= 20 ms in normal operation);
+ * the library default (1000 ms) would stall core 0 inside the executor spin. */
+#define ROS_SERVICE_REPLY_TIMEOUT_MS 20u
+_Static_assert(ROS_NODE_CREATE_TIMEOUT_MS < 500u - 100u, "node step leaves beat margin");
 #define ROS_OPEN_PING_TIMEOUT_MS 50u /* fresh XRCE ping just before the session open */
 #define ROS_COMMAND_DEPTH 1u
 #define ROS_SPIN_TIMEOUT_MS 2u      /* executor opportunity per owner iteration */
@@ -67,6 +74,7 @@ typedef struct {
     uint8_t depth;               /* keep-last history depth (0 = not a topic) */
     ros_entity_id_t target;      /* executor handle: the entity it dispatches */
     uint8_t index;               /* range sensor index / umb_ros_command_topic_t */
+    uint16_t reply_timeout_ms;   /* service: reliable response confirm bound */
 } ros_entity_desc_t;
 
 const ros_entity_desc_t *ros_entity_desc(ros_entity_id_t id); /* NULL if out of range */
@@ -81,7 +89,7 @@ typedef struct {
 typedef enum { ROS_SPIN_OK, ROS_SPIN_ERROR } ros_spin_result_t;
 
 /* Backend contract. create() returns false with nothing of that entity left
- * allocated. destroy() is called once per created entity, in reverse order, and
+ * allocated; a service is created with its reply_timeout_ms applied. destroy() is called once per created entity, in reverse order, and
  * must release memory even when the agent is unreachable. */
 typedef struct {
     bool (*create)(void *ctx, ros_entity_id_t id, const ros_entity_desc_t *d,

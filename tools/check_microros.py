@@ -17,6 +17,9 @@ LIMITS = {
     'RMW_UXRCE_MAX_HISTORY': 4,
 }
 MTU = 1200
+# Bounded session open (rcl_init -> uxr_create_session): attempts x interval ms.
+SESSION_OPEN = {'UXR_CONFIG_MAX_SESSION_CONNECTION_ATTEMPTS': 3,
+                'UXR_CONFIG_MIN_SESSION_CONNECTION_INTERVAL': 50}
 HEADERS = ('rmw_microxrcedds_c/config.h', 'uxr/client/config.h',
            'rclc_parameter/rclc_parameter.h')
 MESSAGES = (('geometry_msgs', 'Twist'), ('sensor_msgs', 'Range'),
@@ -41,6 +44,9 @@ def check_headers(root):
             errors.append(f'{key}: expected {expected}, found {rmw.get(key, "missing")}')
     if uxr.get('UXR_CONFIG_CUSTOM_TRANSPORT_MTU', '').strip() != str(MTU):
         errors.append(f'custom MTU must be {MTU}; rebuild with UCLIENT_CUSTOM_TRANSPORT_MTU={MTU}')
+    for key, expected in SESSION_OPEN.items():
+        if uxr.get(key, '').strip() != str(expected):
+            errors.append(f'{key}: expected {expected} (bounded session open), found {uxr.get(key, "missing")}')
     if params.get('RCLC_EXECUTOR_PARAMETER_SERVER_HANDLES', '').strip() != '6':
         errors.append('expected the pinned Jazzy parameter API with six executor handles')
     if not re.search(r'^#define RMW_UXRCE_TRANSPORT_CUSTOM\s*$',
@@ -110,7 +116,7 @@ def main():
     if errors:
         print('micro-ROS contract failed:\n  ' + '\n  '.join(errors) + '\nRun make microros.', file=sys.stderr)
         return 1
-    print('micro-ROS contract: custom MTU1200, 16 pubs / 4 subs / 10 services, Jazzy types verified')
+    print('micro-ROS contract: custom MTU1200, session open 3x50 ms, 16 pubs / 4 subs / 10 services, Jazzy types verified')
     return 0
 
 if __name__ == '__main__':

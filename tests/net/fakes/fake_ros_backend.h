@@ -21,6 +21,7 @@ typedef struct {
     unsigned spins, pings, syncs, session_starts, creates;
     uint32_t generation;
     ros_session_config_t last_cfg;
+    unsigned service_reply_timeout_ms; /* applied with the last service creation */
     void (*on_destroy)(void *user, ros_entity_id_t id);
     void (*on_spin)(void *user);
     void (*on_blocking)(void *user); /* create, ping and sync: bounded blocking calls */

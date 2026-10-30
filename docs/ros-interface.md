@@ -26,6 +26,11 @@ bool/int/double and low-memory mode. Parameter enumeration is added in Task 10.
 ## Static-library resource contract
 
 - Custom transport, framing disabled at registration; custom MTU **1200 bytes**.
+- Bounded session open: `UCLIENT_MAX_SESSION_CONNECTION_ATTEMPTS=3`,
+  `UCLIENT_MIN_SESSION_CONNECTION_INTERVAL=50` (pinned default 10 x 1000 ms), so
+  `rcl_init` against a silent agent is configured to give up after about 150 ms
+  (not yet measured on hardware). Checked by
+  `tools/check_microros.py`.
 - One node, capacity16 publishers/4 subscriptions/10 services/0 clients/history4.
 - Actual graph uses11 telemetry publishers plus1 parameter-event publisher,
   3 subscriptions, 6 parameter services plus arm and save. One scheduler timer
@@ -88,8 +93,13 @@ Implemented in firmware, not yet validated against a live agent (Task 13).
   parameter server (Task 10) are reserved hooks: their handles are counted, the
   entities are not created yet. `/umbreon/reflex` exists but is filled by Task 12.
 - Creation is one entity per network-task iteration with a 200 ms reliable
-  creation timeout; the session open is preceded by a fresh 50 ms XRCE ping.
-  `agent_up` is published only after every entity and the executor exist.
+  creation timeout (350 ms for the node/participant); the session open is
+  preceded by a fresh 50 ms XRCE ping and bounded by the library (3 x 50 ms). No
+  session is opened while the car is armed (console bench driving), so a slow
+  open can never trip the core-0 stale-beat stop; a live session is kept.
+  `/umbreon/arm` responses confirm within 20 ms (library default 1000 ms).
+  `agent_up` is published only after every entity and the executor exist; the
+  first executor spin happens in the next iteration, after `agent_up`.
   Callbacks carry generation 0 until then, so nothing queued during setup is
   accepted. Client key: FNV-1a of the WiFi MAC; domain from `ros_domain_id`.
 - Loss: three failed 100 ms pings (20 ms each) or three consecutive spins with an
@@ -99,9 +109,15 @@ Implemented in firmware, not yet validated against a live agent (Task 13).
   destroy-session timeout and finalizes all created entities in reverse order,
   then force-closes the session socket. A socket that cannot be closed keeps the
   session busy, defers radio reconfiguration and blocks re-creation.
+  In practice the ping is the main loss detector: best-effort publishes rarely
+  report transport errors and the executor does not surface read errors.
+  False-loss/false-negative rates are measured in Task 13.
 - Time: bounded 20 ms sync, retried every 100 ms until synchronized, then every
   30 s; a failed resync keeps the offset; a new session invalidates it. No
   telemetry is published before the first sync.
+- Odometry integrates only in the 10 ms ROS timer: with no session the pose is
+  held, and the first interval after reconnect (> 200 ms) re-seeds instead of
+  integrating the outage; motion while offline is not tracked.
 - Messages (`firmware/app/ros_messages.c`): all strings/sequences point into fixed
   buffers; generated init/fini are never called on them. Receive/request buffers
   are reset for every new session.

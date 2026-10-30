@@ -46,7 +46,9 @@ TEST(test_graph_names_qos_and_counts_match_contract) {
         case ROS_KIND_PUBLISHER: pubs++; ASSERT_EQ(d->reliability, ROS_QOS_BEST_EFFORT); break;
         case ROS_KIND_SUBSCRIPTION: subs++; ASSERT_EQ(d->reliability, ROS_QOS_BEST_EFFORT);
             ASSERT_EQ(d->depth, 1); ASSERT_EQ(d->type, ROS_TYPE_TWIST); break;
-        case ROS_KIND_SERVICE: srvs++; ASSERT_EQ(d->reliability, ROS_QOS_RELIABLE); break;
+        case ROS_KIND_SERVICE: srvs++; ASSERT_EQ(d->reliability, ROS_QOS_RELIABLE);
+            /* Contract: reliable service responses confirm within <= 20 ms. */
+            ASSERT_TRUE(d->reply_timeout_ms > 0 && d->reply_timeout_ms <= 20); break;
         case ROS_KIND_TIMER: timers++; break;
         case ROS_KIND_EXECUTOR_HANDLE: {
             handles++;

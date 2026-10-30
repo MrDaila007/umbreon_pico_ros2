@@ -427,6 +427,21 @@ TEST(test_endpoint_edit_reconnects_session_on_new_port) {
     agent_port = 7777; ASSERT_TRUE(run_until_agent(&o, 400));
     ASSERT_EQ(ros.last_cfg.agent_port, 7777);
 }
+TEST(test_session_reopen_waits_while_console_armed) {
+    umb_settings_t s = base(UMB_WIFI_STA_ONLY); net_owner_t o; boot(&o, &s);
+    ASSERT_TRUE(run_until_agent(&o, 200));
+    umb_outputs_t armed = {.armed = true}; shared_publish_outputs(&armed);
+    ros.agent_alive = false;
+    unsigned guard = 0;
+    while (agent_link() && guard++ < 60) step(&o);
+    ASSERT_FALSE(agent_link()); ASSERT_EQ(ros.live, 0);
+    ros.agent_alive = true; ros.len = 0;
+    run(&o, 2000); /* bench-armed: no blocking session open */
+    for (unsigned i = 0; i < ros.len; i++) ASSERT_TRUE(!(ros.op[i] == 'c' && ros.id[i] == ROS_ENT_CONTEXT));
+    ASSERT_FALSE(agent_link()); ASSERT_TRUE(wifi_link());
+    umb_outputs_t idle = {.esc_us = 1500}; shared_publish_outputs(&idle);
+    ASSERT_TRUE(run_until_agent(&o, 400));
+}
 int main(void) {
     RUN_TEST(test_offline_radio_never_touches_adapters);
     RUN_TEST(test_sta_join_is_async_and_configured_ip_selected);
@@ -444,5 +459,6 @@ int main(void) {
     RUN_TEST(test_agent_loss_latched_before_entities_finalized_then_fresh_session);
     RUN_TEST(test_wifi_loss_and_reconfigure_release_session_first);
     RUN_TEST(test_endpoint_edit_reconnects_session_on_new_port);
+    RUN_TEST(test_session_reopen_waits_while_console_armed);
     TEST_SUMMARY();
 }

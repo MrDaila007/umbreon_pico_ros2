@@ -1,8 +1,10 @@
 /* Core-0 network owner loop: bounded iterations, sole core-0 heartbeat writer.
  * WiFi/endpoint/ROS-session orchestration lives in net_owner; the rcl backend in
  * ros_entities_rcl. A session step blocks at most one entity creation
- * (ROS_CREATE_TIMEOUT_MS) or an executor spin with an arm ACK wait (60 ms) plus
- * one 20 ms ping/sync, so the beat below stays well inside the 500 ms limit. */
+ * (ROS_CREATE_TIMEOUT_MS, node ROS_NODE_CREATE_TIMEOUT_MS; session open
+ * <= 50 ms ping + 3 x 50 ms library connect attempts) or an executor spin with an
+ * arm ACK wait (60 ms) and its reliable response confirm (20 ms) plus one 20 ms
+ * ping/sync, so the beat below stays well inside the 500 ms limit. */
 #include "net_task.h"
 #include <stdio.h>
 #include "task.h"

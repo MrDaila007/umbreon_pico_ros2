@@ -74,8 +74,9 @@ static void clock_sleep(void *ctx, uint32_t ms) {
 }
 static const ros_arm_clock_t k_arm_clock = {clock_now, clock_sleep, NULL};
 
-/* Blocks at most ROS_ARM_WAIT_MS (60 ms) for the control ACK; the owner loop
- * budgets it (beat before/after the step, well inside the 500 ms limit). */
+/* Blocks at most ROS_ARM_WAIT_MS (60 ms) for the control ACK; rclc then sends
+ * the response, whose reliable confirm is bounded by ROS_SERVICE_REPLY_TIMEOUT_MS
+ * (20 ms). The owner loop budgets both (beat before/after the step). */
 static void arm_cb(const void *request, void *response) {
     (void)response; /* == &s_rcl.msgs.arm_response */
     const std_srvs__srv__SetBool_Request *req = request;
@@ -166,6 +167,33 @@ static bool create_context(void) {
     return true;
 }
 
+static void set_creation_timeout(uint32_t ms) {
+    rmw_context_t *ctx = rcl_context_get_rmw_context(&s_rcl.support.context);
+    if (ctx) (void)rmw_uros_set_context_entity_creation_session_timeout(ctx, (int)ms);
+}
+
+/* The participant behind the node takes the agent longest to create. */
+static bool create_node(void) {
+    s_rcl.node = rcl_get_zero_initialized_node();
+    set_creation_timeout(ROS_NODE_CREATE_TIMEOUT_MS);
+    bool done = ok(rclc_node_init_default(&s_rcl.node, ROS_NODE_NAME, ROS_NODE_NAMESPACE, &s_rcl.support));
+    set_creation_timeout(ROS_CREATE_TIMEOUT_MS);
+    return done;
+}
+
+/* Library default response confirm is 1000 ms inside the executor spin; the
+ * contract bound is applied or the creation fails (service finalized). */
+static bool create_service(rcl_service_t *srv, const rosidl_service_type_support_t *ts,
+                           const ros_entity_desc_t *d) {
+    *srv = rcl_get_zero_initialized_service();
+    if (!ok(rclc_service_init_default(srv, &s_rcl.node, ts, d->name))) return false;
+    rmw_service_t *rmw = rcl_service_get_rmw_handle(srv);
+    if (d->reply_timeout_ms && rmw &&
+        rmw_uros_set_service_session_timeout(rmw, (int)d->reply_timeout_ms) == RMW_RET_OK) return true;
+    (void)ok(rcl_service_fini(srv, &s_rcl.node));
+    return false;
+}
+
 static bool add_handle(const ros_entity_desc_t *d) {
     rclc_executor_t *e = &s_rcl.executor;
     switch (d->target) {
@@ -187,9 +215,7 @@ static bool create(void *ctx, ros_entity_id_t id, const ros_entity_desc_t *d, co
     case ROS_KIND_INIT_OPTIONS: return create_init_options(cfg);
     case ROS_KIND_CONTEXT: return create_context();
     case ROS_KIND_CLOCK: return ok(rcl_clock_init(RCL_STEADY_TIME, &s_rcl.support.clock, &s_rcl.allocator));
-    case ROS_KIND_NODE:
-        s_rcl.node = rcl_get_zero_initialized_node();
-        return ok(rclc_node_init_default(&s_rcl.node, ROS_NODE_NAME, ROS_NODE_NAMESPACE, &s_rcl.support));
+    case ROS_KIND_NODE: return create_node();
     case ROS_KIND_PUBLISHER: {
         rcl_publisher_t *p = &s_rcl.pub[id - ROS_ENT_PUB_RANGE_HR];
         *p = rcl_get_zero_initialized_publisher();
@@ -201,9 +227,7 @@ static bool create(void *ctx, ros_entity_id_t id, const ros_entity_desc_t *d, co
         return ok(rclc_subscription_init(sub, &s_rcl.node, msg_type(d->type), d->name, &q));
     }
     case ROS_KIND_SERVICE:
-        s_rcl.arm = rcl_get_zero_initialized_service();
-        return ok(rclc_service_init_default(&s_rcl.arm, &s_rcl.node,
-                                            ROSIDL_GET_SRV_TYPE_SUPPORT(std_srvs, srv, SetBool), d->name));
+        return create_service(&s_rcl.arm, ROSIDL_GET_SRV_TYPE_SUPPORT(std_srvs, srv, SetBool), d);
     case ROS_KIND_TIMER:
         s_rcl.timer = rcl_get_zero_initialized_timer();
         return ok(rclc_timer_init_default2(&s_rcl.timer, &s_rcl.support,

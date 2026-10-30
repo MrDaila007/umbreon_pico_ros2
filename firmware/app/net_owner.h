@@ -2,8 +2,10 @@
  * the WiFi/endpoint adapters and of first-boot AP password provisioning.
  * Every step performs at most one blocking operation: one <=100 ms XRCE probe,
  * one maintenance-reserved flash write, one radio start/stop, or one session
- * operation (entity creation <=ROS_CREATE_TIMEOUT_MS, 20 ms ping/time sync;
- * plus the executor spin, whose arm handler may wait <=60 ms). Radio
+ * operation (entity creation <=ROS_CREATE_TIMEOUT_MS, node <=ROS_NODE_CREATE_TIMEOUT_MS,
+ * 20 ms ping/time sync; plus the executor spin, whose arm handler may wait
+ * <=60 ms for the ACK and <=20 ms for the response confirm). The session open
+ * is never attempted while armed (console bench driving). Radio
  * reconfiguration (SDK calls measured up to ~250 ms) only happens while
  * disarmed; STA joins are asynchronous.
  * Loss is latched into shared state before any teardown or radio change.

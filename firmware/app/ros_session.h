@@ -25,6 +25,7 @@ typedef struct {
     bool link_up, endpoint_selected;
     ros_session_config_t endpoint; /* selected agent, domain and client key */
     uint32_t generation;           /* current shared session generation */
+    bool open_allowed;             /* false while armed: no (blocking) session open */
 } ros_session_in_t;
 
 typedef struct {

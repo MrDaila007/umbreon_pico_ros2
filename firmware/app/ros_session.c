@@ -39,7 +39,13 @@ bool ros_session_teardown(ros_session_t *s, const ros_backend_t *b) {
     return released;
 }
 
-static void create_one(ros_session_t *s, const ros_backend_t *b) {
+/* The open (rcl_init) is the step that can wait on the agent; a console-armed
+ * bench car must not be disarmed by a core-0 stall, so it waits for disarm. */
+static void create_one(ros_session_t *s, bool open_allowed, const ros_backend_t *b) {
+    if (!open_allowed && s->entities.next == ROS_ENT_CONTEXT) {
+        s->pulse.create_done = true; s->pulse.create_ok = false; /* local init torn down */
+        return;
+    }
     ros_create_result_t r = ros_entities_create_next(&s->entities, b, &s->cfg);
     if (r == ROS_CREATE_PROGRESS) return;
     s->pulse.create_done = true;
@@ -91,7 +97,7 @@ ros_session_out_t ros_session_step(ros_session_t *s, const ros_session_in_t *in,
     bool pinged = false;
     switch (o.action) {
     case UMB_SESSION_ACT_PROBE: /* the endpoint was just XRCE-validated; the open re-pings */
-        s->pulse.probe_done = s->pulse.probe_ok = true; break;
+        s->pulse.probe_done = true; s->pulse.probe_ok = in->open_allowed; break;
     case UMB_SESSION_ACT_CREATE:
         s->cfg = in->endpoint;
         umb_time_sync_invalidate(&s->sync);
@@ -106,9 +112,10 @@ ros_session_out_t ros_session_step(ros_session_t *s, const ros_session_in_t *in,
     case UMB_SESSION_ACT_DESTROY: out.teardown = true; break;
     default: break;
     }
-    if (s->fsm.stage == UMB_SESSION_CREATING) create_one(s, b);
+    if (s->fsm.stage == UMB_SESSION_CREATING) create_one(s, in->open_allowed, b);
+    /* The first spin waits for the next step, after the owner published agent_up. */
     if (o.ready && !s->ready && !o.loss) become_ready(s, in, b);
-    if (s->ready) run_ready(s, in->now_ms, pinged, b);
+    else if (s->ready) run_ready(s, in->now_ms, pinged, b);
     out.ready = s->ready;
     return out;
 }
