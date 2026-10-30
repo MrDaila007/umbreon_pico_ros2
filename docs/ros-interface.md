@@ -300,3 +300,44 @@ deletion refused, a batch is judged per parameter and is **not** atomic (an
 accepted first entry stays applied when a later one is rejected), and the
 descriptor table. The event publishes after a console edit and the
 heap use of the server are measured in Task 13.
+
+## Settings persistence (`/umbreon/save_settings`)
+
+`std_srvs/Trigger`, reliable, reply confirm bounded to 20 ms like `/umbreon/arm`.
+Console `save`, this service and first-boot AP provisioning share one path in
+`settings_apply`: take the exclusive maintenance reservation (refused while armed,
+arming, or another save/provision holds it, so the static flash buffer is never
+shared), wait at most 60 ms for control's neutral acknowledgement, then
+encode/write/read back one slot via `flash_safe_execute` from the core-0 task.
+Control never touches flash. A refusal or a missing acknowledgement performs no
+erase/program; the reservation is always released, so a retry is possible.
+
+Replies (`success` is true only after the write was read back and verified):
+
+| `success` | `message` |
+|---|---|
+| true | `saved: slot <0\|1> seq <n>` (non-secret; the new sequence) |
+| false | `refused: session` (stale or dead session) |
+| false | `refused: armed or busy` |
+| false | `error: neutral ack timeout` |
+| false | `error: flash write failed` (the old blob stays authoritative; no new sequence is reported) |
+
+Reset or power loss at any point of erase/program leaves the previous valid blob
+selected (pure blob tests in `test_settings.c`); the next save targets the other slot.
+
+Timing budget of one callback on the core-0 task (the stale core-0 beat limit is
+500 ms): neutral ACK wait <= 60 ms, hal wait one control period + 5 ms = 25 ms,
+erase+program measured at 5 ms on hardware (Task 6; datasheet worst case for a 4 KiB
+NOR sector erase ~400 ms), readback ~1 ms, reply confirm <= 20 ms. Worst case
+without a mid-callback beat would be about 505 ms, which does not fit, so the
+callback refreshes the core-0 heartbeat once after the neutral ACK and before the
+flash work (the owner task itself making bounded progress; nothing else is fed).
+That leaves about 450 ms at the datasheet worst case and about 110 ms measured.
+The hardware watchdog is widened to 2 s only around the flash write and restored
+immediately; control remains the only routine feeder. Do not lengthen the erase
+budget or add feeds outside control: redesign instead.
+
+Flash-induced control pauses are counted apart from jitter: the control task records
+each wake's lateness (> 5 ms) as a flash pause when a maintenance reservation is
+held, otherwise as jitter; catch-up cycles after one stall are not new events.
+Both appear in the console `status` line `control:`.

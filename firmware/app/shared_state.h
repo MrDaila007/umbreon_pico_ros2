@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "umb_arming.h"
+#include "umb_cycle_stats.h"
 #include "umb_control.h"
 #include "umb_settings.h"
 #include "umb_types.h"
@@ -107,6 +108,9 @@ typedef struct {
 } shared_network_t;
 void shared_publish_network(const shared_network_t *n);
 void shared_get_network(shared_network_t *out);
+/* Control-cycle lateness (core 1 publishes; jitter and flash pauses are separate). */
+void shared_publish_cycle_stats(const umb_cycle_stats_t *s);
+void shared_get_cycle_stats(umb_cycle_stats_t *out);
 
 #define SHARED_ARM_QUEUE_LEN 8u
 typedef struct {

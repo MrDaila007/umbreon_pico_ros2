@@ -297,6 +297,38 @@ TEST(test_pick_slot_seq_wrap) {
     ASSERT_EQ(s, 0);
 }
 
+/* Power loss / reset at each point of "erase target slot, program, verify":
+ * the previous blob is the one selected until the new one is complete, and the
+ * next save always targets the slot not holding the newest valid blob. */
+TEST(test_power_loss_during_save_keeps_previous_blob) {
+    uint8_t slots[2][UMB_SETTINGS_SLOT_SIZE];
+    umb_settings_t o, edited = umb_settings_defaults(); uint32_t s = 0;
+    enc(7, slots[0]); memset(slots[1], 0xFF, sizeof slots[1]);
+    edited.agent_port = 4321;
+    static uint8_t full[UMB_SETTINGS_SLOT_SIZE];
+    memset(full, 0xFF, sizeof full);
+    size_t n = umb_settings_encode(&edited, 8, full, sizeof full);
+    ASSERT_TRUE(n > 0);
+    /* Reset after erase only (all 0xFF), after a torn program of every prefix. */
+    size_t cuts[] = {0, 1, 8, n / 2, n - 1};
+    for (unsigned i = 0; i < sizeof cuts / sizeof cuts[0]; i++) {
+        memset(slots[1], 0xFF, sizeof slots[1]);
+        memcpy(slots[1], full, cuts[i]);
+        ASSERT_EQ(umb_settings_pick_slot(slots[0], slots[1], sizeof slots[0], &o, &s), 0);
+        ASSERT_EQ(s, 7);
+        ASSERT_TRUE(o.agent_port != 4321);
+    }
+    /* Complete program: the new blob wins, and the next save targets slot 0. */
+    memcpy(slots[1], full, sizeof full);
+    ASSERT_EQ(umb_settings_pick_slot(slots[0], slots[1], sizeof slots[0], &o, &s), 1);
+    ASSERT_EQ(s, 8);
+    ASSERT_EQ(o.agent_port, 4321);
+    /* A torn write of the OLD slot (the next target) never loses the newest. */
+    memset(slots[0], 0xFF, 100);
+    ASSERT_EQ(umb_settings_pick_slot(slots[0], slots[1], sizeof slots[0], &o, &s), 1);
+    ASSERT_EQ(s, 8);
+}
+
 TEST(test_pick_slot_equal_seq_prefers_slot0) {
     uint8_t a[UMB_SETTINGS_SLOT_SIZE], b[UMB_SETTINGS_SLOT_SIZE];
     umb_settings_t o; uint32_t s = 0;
@@ -402,6 +434,7 @@ int main(void) {
     RUN_TEST(test_pick_slot_erased_flash_gives_defaults);
     RUN_TEST(test_pick_slot_seq_wrap);
     RUN_TEST(test_pick_slot_equal_seq_prefers_slot0);
+    RUN_TEST(test_power_loss_during_save_keeps_previous_blob);
     RUN_TEST(test_typed_numeric_access_ranges_and_types);
     TEST_SUMMARY();
 }

@@ -68,6 +68,7 @@ void ros_messages_reset(ros_messages_t *m) {
     reset_battery(m);
     reset_diagnostics(m);
     BIND(m->arm_response.message, m->text.arm_message, "");
+    BIND(m->save_response.message, m->text.save_message, "");
 }
 
 void ros_messages_reset_inputs(ros_messages_t *m) {
@@ -75,6 +76,9 @@ void ros_messages_reset_inputs(ros_messages_t *m) {
     memset(&m->arm_request, 0, sizeof m->arm_request);
     m->arm_response.success = false;
     BIND(m->arm_response.message, m->text.arm_message, "");
+    memset(&m->save_request, 0, sizeof m->save_request);
+    m->save_response.success = false;
+    BIND(m->save_response.message, m->text.save_message, "");
 }
 
 void ros_messages_twist(const geometry_msgs__msg__Twist *in, umb_twist_fields_t *out) {
@@ -85,6 +89,11 @@ void ros_messages_twist(const geometry_msgs__msg__Twist *in, umb_twist_fields_t 
 void ros_messages_arm_reply(ros_messages_t *m, bool success, const char *message) {
     m->arm_response.success = success;
     BIND(m->arm_response.message, m->text.arm_message, message);
+}
+
+void ros_messages_save_reply(ros_messages_t *m, bool success, const char *message) {
+    m->save_response.success = success;
+    BIND(m->save_response.message, m->text.save_message, message);
 }
 
 /* ---- Telemetry ---------------------------------------------------------- */

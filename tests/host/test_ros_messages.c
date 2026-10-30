@@ -85,6 +85,7 @@ TEST(test_reset_binds_every_string_to_owned_bounded_storage) {
         ASSERT_TRUE(bound(&m.diag_values[i].value, ROS_DIAG_VALUE_MAX));
     }
     ASSERT_TRUE(bound(&m.arm_response.message, ROS_ARM_MESSAGE_MAX) && m.arm_response.message.size == 0);
+    ASSERT_TRUE(bound(&m.save_response.message, ROS_SAVE_MESSAGE_MAX) && m.save_response.message.size == 0);
     /* Repeated setup is idempotent: an identical known state, no residue. */
     static ros_messages_t first; memcpy(&first, &m, sizeof m);
     ros_messages_arm_reply(&m, true, "armed"); m.cmd[1].linear.x = 3.0;
@@ -100,6 +101,21 @@ TEST(test_inputs_reset_per_generation_keeps_bindings) {
     ASSERT_TRUE(m.cmd[0].linear.x == 0.0 && m.cmd[2].angular.z == 0.0 && !m.arm_request.data);
     ASSERT_FALSE(m.arm_response.success);
     ASSERT_TRUE(bound(&m.arm_response.message, ROS_ARM_MESSAGE_MAX) && m.arm_response.message.size == 0);
+}
+
+TEST(test_save_reply_is_bounded_and_reset_per_generation) {
+    setup();
+    ros_messages_save_reply(&m, true, "saved: slot 1 seq 9");
+    ASSERT_TRUE(m.save_response.success && str_is(&m.save_response.message, "saved: slot 1 seq 9"));
+    ASSERT_TRUE(m.arm_response.message.size == 0);        /* own buffer */
+    char longer[ROS_SAVE_MESSAGE_MAX + 8];
+    memset(longer, 'y', sizeof longer - 1); longer[sizeof longer - 1] = 0;
+    ros_messages_save_reply(&m, false, longer);
+    ASSERT_FALSE(m.save_response.success);
+    ASSERT_EQ(m.save_response.message.size, ROS_SAVE_MESSAGE_MAX - 1);
+    ros_messages_reset_inputs(&m);
+    ASSERT_FALSE(m.save_response.success);
+    ASSERT_TRUE(bound(&m.save_response.message, ROS_SAVE_MESSAGE_MAX) && m.save_response.message.size == 0);
 }
 
 TEST(test_twist_and_bounded_arm_reply) {
@@ -228,6 +244,7 @@ int main(void) {
     RUN_TEST(test_reset_binds_every_string_to_owned_bounded_storage);
     RUN_TEST(test_inputs_reset_per_generation_keeps_bindings);
     RUN_TEST(test_twist_and_bounded_arm_reply);
+    RUN_TEST(test_save_reply_is_bounded_and_reset_per_generation);
     RUN_TEST(test_unsynced_time_publishes_nothing_but_odometry_integrates);
     RUN_TEST(test_synced_tick_stamps_from_acquisition_and_throttles);
     RUN_TEST(test_range_samples_between_due_ticks_are_not_lost_and_offline_event_once);

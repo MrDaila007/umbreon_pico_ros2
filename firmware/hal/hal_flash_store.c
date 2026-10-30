@@ -19,6 +19,8 @@
 
 _Static_assert(UMB_SETTINGS_SLOT_SIZE == FLASH_SECTOR_SIZE, "one slot per flash sector");
 
+static bool save_locked(const umb_settings_t *s);
+static volatile bool s_saving;
 static int s_slot = -1;        /* newest valid slot, -1 = defaults */
 static uint32_t s_seq;
 static uint32_t s_last_write_ms;
@@ -54,6 +56,16 @@ static void __no_inline_not_in_flash_func(write_sector)(void *param) {
 }
 
 bool hal_settings_save(const umb_settings_t *s) {
+    /* Defense in depth: the maintenance reservation already serializes callers, but
+     * s_buf is static, so a second entry must fail rather than share it. */
+    if (s_saving) return false;
+    s_saving = true;
+    bool ok = save_locked(s);
+    s_saving = false;
+    return ok;
+}
+
+static bool save_locked(const umb_settings_t *s) {
     int target = (s_slot == 0) ? 1 : 0;
     uint32_t seq = s_seq + 1u;
     memset(s_buf, 0xFF, sizeof s_buf);

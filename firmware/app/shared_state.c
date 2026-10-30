@@ -33,6 +33,7 @@ typedef struct {
     bool cue_pending;
     int encoder_state;
     shared_network_t network;
+    umb_cycle_stats_t cycle_stats;
 } shared_t;
 
 static shared_t s_shared;
@@ -481,6 +482,18 @@ bool shared_maintenance_active(void) {
     bool active = s_shared.maintenance;
     unlock(irq);
     return active;
+}
+
+void shared_publish_cycle_stats(const umb_cycle_stats_t *s) {
+    uint32_t irq = lock();
+    s_shared.cycle_stats = *s;
+    unlock(irq);
+}
+
+void shared_get_cycle_stats(umb_cycle_stats_t *out) {
+    uint32_t irq = lock();
+    *out = s_shared.cycle_stats;
+    unlock(irq);
 }
 
 void shared_publish_network(const shared_network_t *n) {

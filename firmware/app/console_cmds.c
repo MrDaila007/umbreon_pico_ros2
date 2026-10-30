@@ -91,6 +91,12 @@ static void print_network(const umb_settings_t *s) {
                                    NAME(AP_PASS_RESULTS, n.ap_pass_last));
     printf("\nnet loop: last %lu ms, max %lu ms, radio init %lu ms%s\n", (unsigned long)n.loop_last_ms,
            (unsigned long)n.loop_max_ms, (unsigned long)n.radio_init_ms, n.probe_owned ? ", probe socket held" : "");
+    /* Flash saves park the control core; those pauses are not scheduling jitter. */
+    umb_cycle_stats_t c;
+    shared_get_cycle_stats(&c);
+    printf("control: %lu cycles, jitter late %lu (max %lu ms), flash pauses %lu (max %lu ms)\n",
+           (unsigned long)c.cycles, (unsigned long)c.jitter_late, (unsigned long)c.jitter_max_ms,
+           (unsigned long)c.flash_pauses, (unsigned long)c.flash_pause_max_ms);
 }
 
 static void print_status(void) {

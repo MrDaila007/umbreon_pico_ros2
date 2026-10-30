@@ -30,6 +30,8 @@ static const ros_entity_desc_t s_graph[ROS_ENT_COUNT] = {
     [ROS_ENT_SUB_CMD_RAW] = SUB("/umbreon/cmd_raw", 2u),       /* UMB_ROS_CMD_RAW */
     [ROS_ENT_SRV_ARM] = {ROS_KIND_SERVICE, "/umbreon/arm", ROS_TYPE_SET_BOOL, ROS_QOS_RELIABLE,
                          0u, ROS_ENT_COUNT, 0u, ROS_SERVICE_REPLY_TIMEOUT_MS},
+    [ROS_ENT_SRV_SAVE] = {ROS_KIND_SERVICE, "/umbreon/save_settings", ROS_TYPE_TRIGGER, ROS_QOS_RELIABLE,
+                          0u, ROS_ENT_COUNT, 1u, ROS_SERVICE_REPLY_TIMEOUT_MS},
     [ROS_ENT_PARAM_SERVER] = {ROS_KIND_PARAM_SERVER, "/umbreon/pico", ROS_TYPE_NONE, ROS_QOS_RELIABLE,
                               0u, ROS_ENT_COUNT, 0u, ROS_SERVICE_REPLY_TIMEOUT_MS},
     [ROS_ENT_TIMER] = LOCAL(ROS_KIND_TIMER),
@@ -38,6 +40,7 @@ static const ros_entity_desc_t s_graph[ROS_ENT_COUNT] = {
     [ROS_ENT_EXEC_CMD_TELEOP] = HANDLE(ROS_ENT_SUB_CMD_TELEOP),
     [ROS_ENT_EXEC_CMD_RAW] = HANDLE(ROS_ENT_SUB_CMD_RAW),
     [ROS_ENT_EXEC_ARM] = HANDLE(ROS_ENT_SRV_ARM),
+    [ROS_ENT_EXEC_SAVE] = HANDLE(ROS_ENT_SRV_SAVE),
     [ROS_ENT_EXEC_PARAMS] = HANDLE(ROS_ENT_PARAM_SERVER),
     [ROS_ENT_EXEC_TIMER] = HANDLE(ROS_ENT_TIMER),
 };

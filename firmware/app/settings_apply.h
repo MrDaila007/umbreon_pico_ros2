@@ -4,6 +4,10 @@ typedef enum { SETTINGS_SAVE_OK, SETTINGS_SAVE_BUSY, SETTINGS_SAVE_NEUTRAL_TIMEO
                SETTINGS_SAVE_FLASH_FAILED, SETTINGS_SAVE_ALREADY_SET,
                SETTINGS_SAVE_INVALID } settings_save_result_t;
 settings_save_result_t settings_save_current(void);
+/* Same, but calls `progress` (may be NULL) once after control's neutral ACK and
+ * before any flash work. Network callers use it to refresh the core-0 heartbeat so
+ * the ACK wait and the flash write do not add up against the 500 ms stale limit. */
+settings_save_result_t settings_save_with_progress(void (*progress)(void));
 /* First-boot AP credential: under one maintenance reservation, persist the settings
  * flash already holds (never unsaved RAM edits) plus `password` (8..63 printable
  * bytes), verify, and only then publish the password to shared settings. If flash

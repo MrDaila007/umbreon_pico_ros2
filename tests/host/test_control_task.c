@@ -45,6 +45,7 @@ void vTaskDelayUntil(TickType_t *wake, TickType_t ms) {
     if (++tick > max_ticks) longjmp(finished, 1);
     *wake += ms;
     if (clock_ms < *wake) clock_ms = *wake;
+    if ((scenario == 5 || scenario == 6) && tick == 2) clock_ms += 40; /* core 1 parked / starved */
     if (scenario != 3 || clock_ms <= 100) shared_core0_beat(clock_ms);
     if (scenario == 0) {
         if (tick == 1 || tick == 4) {
@@ -106,11 +107,30 @@ TEST(test_task_maintenance_ack_follows_pwm_and_watchdog) {
     ASSERT_TRUE(maintenance_ack_order);
     ASSERT_TRUE(shared_maintenance_acknowledged(maintenance_id));
 }
+TEST(test_task_flash_pause_counted_apart_from_jitter) {
+    setup(5, 4, UMB_ARM_BOTH);
+    ASSERT_TRUE(shared_begin_maintenance(&maintenance_id));
+    run();
+    umb_cycle_stats_t st; shared_get_cycle_stats(&st);
+    ASSERT_EQ(st.flash_pauses, 1);
+    ASSERT_EQ(st.flash_pause_max_ms, 40);
+    ASSERT_EQ(st.jitter_late, 0);
+    ASSERT_TRUE(st.cycles >= 3);
+}
+TEST(test_task_late_cycle_without_maintenance_is_jitter) {
+    setup(6, 4, UMB_ARM_BOTH); run();
+    umb_cycle_stats_t st; shared_get_cycle_stats(&st);
+    ASSERT_EQ(st.jitter_late, 1);
+    ASSERT_EQ(st.jitter_max_ms, 40);
+    ASSERT_EQ(st.flash_pauses, 0);
+}
 int main(void) {
     RUN_TEST(test_task_loss_clears_cached_command_even_after_rearm);
     RUN_TEST(test_task_cancel_after_pop_never_arms);
     RUN_TEST(test_task_expired_after_pop_never_arms);
     RUN_TEST(test_task_console_traffic_does_not_mask_stale_net_beat);
     RUN_TEST(test_task_maintenance_ack_follows_pwm_and_watchdog);
+    RUN_TEST(test_task_flash_pause_counted_apart_from_jitter);
+    RUN_TEST(test_task_late_cycle_without_maintenance_is_jitter);
     TEST_SUMMARY();
 }

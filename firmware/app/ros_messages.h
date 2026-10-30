@@ -19,6 +19,7 @@
 #include <sensor_msgs/msg/detail/imu__struct.h>
 #include <sensor_msgs/msg/detail/range__struct.h>
 #include <std_srvs/srv/detail/set_bool__struct.h>
+#include <std_srvs/srv/detail/trigger__struct.h>
 #include "ros_entities.h"
 #include "shared_state.h"
 #include "umb_odometry.h"
@@ -33,6 +34,7 @@
 #define ROS_DIAG_VALUE_MAX 32u
 #define ROS_DIAG_VALUES 4u
 #define ROS_ARM_MESSAGE_MAX 64u
+#define ROS_SAVE_MESSAGE_MAX 64u
 #define ROS_COMMAND_TOPICS 3u
 #define ROS_DIAG_HWID "umbreon_pico"
 
@@ -44,7 +46,7 @@ typedef struct {
     char diag_frame[1];
     char diag_name[ROS_DIAG_NAME_MAX], diag_message[ROS_DIAG_MESSAGE_MAX], diag_hwid[ROS_DIAG_HWID_MAX];
     char diag_key[ROS_DIAG_VALUES][ROS_DIAG_KEY_MAX], diag_value[ROS_DIAG_VALUES][ROS_DIAG_VALUE_MAX];
-    char arm_message[ROS_ARM_MESSAGE_MAX];
+    char arm_message[ROS_ARM_MESSAGE_MAX], save_message[ROS_SAVE_MESSAGE_MAX];
 } ros_message_text_t;
 
 typedef struct {
@@ -59,6 +61,8 @@ typedef struct {
     geometry_msgs__msg__Twist cmd[ROS_COMMAND_TOPICS]; /* subscription receive buffers */
     std_srvs__srv__SetBool_Request arm_request;
     std_srvs__srv__SetBool_Response arm_response;
+    std_srvs__srv__Trigger_Request save_request;
+    std_srvs__srv__Trigger_Response save_response;
     ros_message_text_t text;
 } ros_messages_t;
 
@@ -70,6 +74,7 @@ void ros_messages_reset_inputs(ros_messages_t *m);
 void ros_messages_twist(const geometry_msgs__msg__Twist *in, umb_twist_fields_t *out);
 /* Bounded copy into the response's own buffer (message may be truncated). */
 void ros_messages_arm_reply(ros_messages_t *m, bool success, const char *message);
+void ros_messages_save_reply(ros_messages_t *m, bool success, const char *message);
 
 /* ---- Telemetry ---------------------------------------------------------- */
 typedef struct {

@@ -9,6 +9,7 @@
 #include "shared_state.h"
 #include "umb_arming.h"
 #include "umb_control.h"
+#include "umb_cycle_stats.h"
 #include "umb_imu_filter.h"
 
 /* Hands one queued arm request to the arming state machine. */
@@ -89,6 +90,7 @@ void control_task(void *param) {
     cmd_state_t cs;
     memset(&cs, 0, sizeof cs);
     bool watchdog_on = false;
+    umb_cycle_stats_t cycles = {0};
     TickType_t wake = xTaskGetTickCount();
 
     for (;;) {
@@ -108,6 +110,9 @@ void control_task(void *param) {
 
         uint32_t maintenance_id;
         umb_control_in_t in = gather_inputs(&cs, &maintenance_id);
+        /* Lateness of this wake: a save parks this core in flash_safe_execute. */
+        cycles = umb_cycle_stats_record(cycles, (int32_t)(xTaskGetTickCount() - wake), in.maintenance);
+        shared_publish_cycle_stats(&cycles);
         umb_outputs_t out;
         ctl = umb_control_step(ctl, &in, &settings, &out);
         if (!shared_commit_arm_batch(requests, results, count, &out, &ctl.arming, hal_now_ms())) {

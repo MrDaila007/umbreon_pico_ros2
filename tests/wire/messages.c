@@ -19,6 +19,7 @@
 #include <uxr/client/config.h>
 #include <geometry_msgs/msg/detail/twist__rosidl_typesupport_microxrcedds_c.h>
 #include <std_srvs/srv/detail/set_bool__rosidl_typesupport_microxrcedds_c.h>
+#include <std_srvs/srv/detail/trigger__rosidl_typesupport_microxrcedds_c.h>
 #include "ros_messages.h"
 
 #define TS(pkg, name) ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_microxrcedds_c, pkg, msg, name)()
@@ -116,6 +117,10 @@ static void check_production(void) {
     check("prod SetBool_Response",
           ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_microxrcedds_c, std_srvs, srv, SetBool_Response)(),
           &prod.arm_response);
+    ros_messages_save_reply(&prod, true, longest);
+    check("prod Trigger_Response",
+          ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_microxrcedds_c, std_srvs, srv, Trigger_Response)(),
+          &prod.save_response);
 }
 int main(void) {
     check_production();

@@ -18,15 +18,23 @@ static settings_save_result_t reserve_neutral(uint32_t *token) {
     return SETTINGS_SAVE_NEUTRAL_TIMEOUT;
 }
 
-settings_save_result_t settings_save_current(void) {
+/* The maintenance reservation is the global flash transaction: it is exclusive, so
+ * a second save (console, ROS, provisioning) is refused BUSY while one is in
+ * flight and the static flash buffer in the store is never shared. */
+settings_save_result_t settings_save_with_progress(void (*progress)(void)) {
     uint32_t token;
     settings_save_result_t reserved = reserve_neutral(&token);
     if (reserved != SETTINGS_SAVE_OK) return reserved;
     umb_settings_t settings;
     shared_get_settings(&settings);
+    if (progress) progress();
     bool saved = hal_settings_save(&settings);
     shared_end_maintenance(token);
     return saved ? SETTINGS_SAVE_OK : SETTINGS_SAVE_FLASH_FAILED;
+}
+
+settings_save_result_t settings_save_current(void) {
+    return settings_save_with_progress(NULL);
 }
 
 static bool valid_wpa2_pass(const char *p) {

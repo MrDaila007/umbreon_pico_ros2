@@ -20,6 +20,7 @@
 #include <sensor_msgs/msg/imu.h>
 #include <sensor_msgs/msg/range.h>
 #include <std_srvs/srv/set_bool.h>
+#include <std_srvs/srv/trigger.h>
 #include "FreeRTOS.h"
 #include "task.h"
 #include "hal_time.h"
@@ -27,6 +28,7 @@
 #include "ros_commands.h"
 #include "ros_messages.h"
 #include "ros_params_rcl.h"
+#include "ros_save.h"
 #include "ros_services.h"
 #include "shared_state.h"
 
@@ -42,7 +44,7 @@ typedef struct {
     rcl_node_t node;
     rcl_publisher_t pub[PUBLISHERS];
     rcl_subscription_t sub[ROS_COMMAND_TOPICS];
-    rcl_service_t arm;
+    rcl_service_t arm, save;
     rcl_timer_t timer;
     rclc_executor_t executor;
     hal_udp_transport_t transport;
@@ -83,6 +85,16 @@ static void arm_cb(const void *request, void *response) {
     const std_srvs__srv__SetBool_Request *req = request;
     ros_arm_reply_t r = ros_services_arm(req->data, s_rcl.generation, &k_arm_clock);
     ros_messages_arm_reply(&s_rcl.msgs, r.success, r.message);
+}
+
+/* Blocks at most the 60 ms neutral ACK plus one flash write (docs/ros-interface.md).
+ * The beat before the flash work keeps ACK wait + write inside the 500 ms stale
+ * limit; it is the owner task itself making bounded progress, not a bypass. */
+static void save_beat(void) { shared_core0_beat(hal_now_ms()); }
+static void save_cb(const void *request, void *response) {
+    (void)request; (void)response; /* == &s_rcl.msgs.save_request / save_response */
+    ros_save_reply_t r = ros_services_save(s_rcl.generation, save_beat);
+    ros_messages_save_reply(&s_rcl.msgs, r.success, r.message);
 }
 
 static bool publish_cb(void *ctx, ros_entity_id_t id, const void *msg) {
@@ -203,6 +215,9 @@ static bool add_handle(const ros_entity_desc_t *d) {
     case ROS_ENT_SRV_ARM:
         return ok(rclc_executor_add_service(e, &s_rcl.arm, &s_rcl.msgs.arm_request,
                                             &s_rcl.msgs.arm_response, arm_cb));
+    case ROS_ENT_SRV_SAVE:
+        return ok(rclc_executor_add_service(e, &s_rcl.save, &s_rcl.msgs.save_request,
+                                            &s_rcl.msgs.save_response, save_cb));
     default: {
         unsigned i = ros_entity_desc(d->target)->index;
         return ok(rclc_executor_add_subscription(e, &s_rcl.sub[i], &s_rcl.msgs.cmd[i], k_cmd_cb[i], ON_NEW_DATA));
@@ -229,7 +244,9 @@ static bool create(void *ctx, ros_entity_id_t id, const ros_entity_desc_t *d, co
         return ok(rclc_subscription_init(sub, &s_rcl.node, msg_type(d->type), d->name, &q));
     }
     case ROS_KIND_SERVICE:
-        return create_service(&s_rcl.arm, ROSIDL_GET_SRV_TYPE_SUPPORT(std_srvs, srv, SetBool), d);
+        return id == ROS_ENT_SRV_SAVE
+            ? create_service(&s_rcl.save, ROSIDL_GET_SRV_TYPE_SUPPORT(std_srvs, srv, Trigger), d)
+            : create_service(&s_rcl.arm, ROSIDL_GET_SRV_TYPE_SUPPORT(std_srvs, srv, SetBool), d);
     case ROS_KIND_PARAM_SERVER:
         return ros_params_rcl_create(&s_rcl.node, rcl_context_get_rmw_context(&s_rcl.support.context),
                                      ROS_CREATE_TIMEOUT_MS);
@@ -264,7 +281,9 @@ static void destroy(void *ctx, ros_entity_id_t id, const ros_entity_desc_t *d) {
     case ROS_KIND_NODE: fini(rcl_node_fini(&s_rcl.node)); break;
     case ROS_KIND_PUBLISHER: fini(rcl_publisher_fini(&s_rcl.pub[id - ROS_ENT_PUB_RANGE_HR], &s_rcl.node)); break;
     case ROS_KIND_SUBSCRIPTION: fini(rcl_subscription_fini(&s_rcl.sub[d->index], &s_rcl.node)); break;
-    case ROS_KIND_SERVICE: fini(rcl_service_fini(&s_rcl.arm, &s_rcl.node)); break;
+    case ROS_KIND_SERVICE:
+        fini(rcl_service_fini(id == ROS_ENT_SRV_SAVE ? &s_rcl.save : &s_rcl.arm, &s_rcl.node));
+        break;
     case ROS_KIND_PARAM_SERVER: if (!ros_params_rcl_destroy(&s_rcl.node)) s_rcl.fini_errors++; break;
     case ROS_KIND_TIMER: fini(rcl_timer_fini(&s_rcl.timer)); break;
     case ROS_KIND_EXECUTOR: fini(rclc_executor_fini(&s_rcl.executor)); break; /* frees handles + wait set */

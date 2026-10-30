@@ -34,6 +34,9 @@ TEST(test_graph_names_qos_and_counts_match_contract) {
     ASSERT_EQ(ros_entity_desc(ROS_ENT_PUB_REFLEX)->type, ROS_TYPE_DIAG_STATUS);
     ASSERT_EQ(ros_entity_desc(ROS_ENT_PUB_DIAGNOSTICS)->type, ROS_TYPE_DIAG_ARRAY);
     ASSERT_EQ(ros_entity_desc(ROS_ENT_SRV_ARM)->type, ROS_TYPE_SET_BOOL);
+    ASSERT_TRUE(strcmp(name(ROS_ENT_SRV_SAVE), "/umbreon/save_settings") == 0);
+    ASSERT_EQ(ros_entity_desc(ROS_ENT_SRV_SAVE)->type, ROS_TYPE_TRIGGER);
+    ASSERT_EQ(ros_entity_desc(ROS_ENT_EXEC_SAVE)->target, ROS_ENT_SRV_SAVE);
     ASSERT_EQ(ros_entity_desc(ROS_ENT_SUB_CMD_VEL)->index, 0);   /* UMB_ROS_CMD_VEL */
     ASSERT_EQ(ros_entity_desc(ROS_ENT_SUB_CMD_TELEOP)->index, 1);
     ASSERT_EQ(ros_entity_desc(ROS_ENT_SUB_CMD_RAW)->index, 2);
@@ -68,10 +71,10 @@ TEST(test_graph_names_qos_and_counts_match_contract) {
         default: ASSERT_TRUE(d->name == NULL); break;
         }
     }
-    ASSERT_EQ(pubs, 11); ASSERT_EQ(subs, 3); ASSERT_EQ(srvs, 1); ASSERT_EQ(timers, 1);
+    ASSERT_EQ(pubs, 11); ASSERT_EQ(subs, 3); ASSERT_EQ(srvs, 2); ASSERT_EQ(timers, 1);
     ASSERT_EQ(params, 1); ASSERT_EQ(handles, subs + srvs + params + timers);
-    /* Executor capacity: 3 subs + arm + 6 parameter handles + timer = 11 of 12; 1 reserved for save. */
-    ASSERT_EQ(ROS_EXECUTOR_HANDLES, 12); ASSERT_EQ(weight, 11); ASSERT_TRUE(weight <= ROS_EXECUTOR_HANDLES);
+    /* Executor capacity: 3 subs + arm + save + 6 parameter handles + timer = 12 of 12. */
+    ASSERT_EQ(ROS_EXECUTOR_HANDLES, 12); ASSERT_EQ(weight, 12); ASSERT_TRUE(weight <= ROS_EXECUTOR_HANDLES);
     ASSERT_EQ(ROS_PARAM_SERVER_HANDLES, 6);
     ASSERT_TRUE(ROS_ENT_PARAM_SERVER > ROS_ENT_SRV_ARM && ROS_ENT_PARAM_SERVER < ROS_ENT_TIMER);
     ASSERT_TRUE(ROS_PARAM_CREATE_BUDGET_MS < 500u - 100u); /* inside one core-0 beat window */
