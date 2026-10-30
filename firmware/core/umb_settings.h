@@ -45,7 +45,10 @@ typedef struct {
 } umb_settings_t;
 
 /* Build-time defaults for network identity; the target build defines these
- * from config/secrets.cmake. Host builds see the empty defaults. */
+ * from config/secrets.cmake via a generated header. Host builds see the empty defaults. */
+#ifdef UMB_HAVE_BUILD_SECRETS
+#include "umb_build_secrets.h"
+#endif
 #ifndef UMB_DEFAULT_WIFI_SSID
 #define UMB_DEFAULT_WIFI_SSID ""
 #endif

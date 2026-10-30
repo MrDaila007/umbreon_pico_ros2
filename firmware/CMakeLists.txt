@@ -61,6 +61,8 @@ foreach(var UMB_SSID UMB_PASS)
     string(REPLACE "\\" "\\\\" ${var} "${${var}}")
     string(REPLACE "\"" "\\\"" ${var} "${${var}}")
 endforeach()
+configure_file(${CMAKE_CURRENT_LIST_DIR}/umb_build_secrets.h.in
+               ${CMAKE_CURRENT_BINARY_DIR}/generated/umb_build_secrets.h @ONLY)
 
 file(GLOB CORE_SRCS CONFIGURE_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/core/*.c)
 file(GLOB DRIVER_SRCS CONFIGURE_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/drivers/*.c)
@@ -110,10 +112,10 @@ target_include_directories(umbreon_pico_ros2 PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/drivers
     ${CMAKE_CURRENT_LIST_DIR}/hal
     ${CMAKE_CURRENT_LIST_DIR}/app
-    ${MICROROS_DIR}/include)
+    ${MICROROS_DIR}/include
+    ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_compile_definitions(umbreon_pico_ros2 PRIVATE
-    UMB_DEFAULT_WIFI_SSID="${UMB_SSID}"
-    UMB_DEFAULT_WIFI_PASS="${UMB_PASS}"
+    UMB_HAVE_BUILD_SECRETS=1
     UMB_DEFAULT_AGENT_IP=${UMB_AGENT_IP_U32}
     UMB_DEFAULT_AGENT_PORT=${UMB_AGENT_PORT}
     PICO_DEFAULT_UART=0
