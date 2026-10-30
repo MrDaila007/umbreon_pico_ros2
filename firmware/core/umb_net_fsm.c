@@ -118,6 +118,8 @@ umb_session_t umb_session_step(umb_session_t s, const umb_session_in_t *in, umb_
     if (s.stage != UMB_SESSION_OFF && s.stage != UMB_SESSION_BACKOFF && s.stage != UMB_SESSION_DESTROYING &&
         (!in->wifi_up || in->endpoint_changed ||
          (s.stage != UMB_SESSION_FINDING && !in->endpoint_valid))) return session_drop(s, in->now_ms, out);
+    if ((s.stage == UMB_SESSION_READY || s.stage == UMB_SESSION_PINGING) && in->transport_failed)
+        return session_drop(s, in->now_ms, out);
     switch (s.stage) {
     case UMB_SESSION_OFF: return session_begin(s, in, out);
     case UMB_SESSION_FINDING:

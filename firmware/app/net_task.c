@@ -1,9 +1,13 @@
 /* Core-0 network owner loop: bounded iterations, sole core-0 heartbeat writer.
- * WiFi/endpoint orchestration lives in net_owner; ROS sessions arrive in Task 9. */
+ * WiFi/endpoint/ROS-session orchestration lives in net_owner; the rcl backend in
+ * ros_entities_rcl. A session step blocks at most one entity creation
+ * (ROS_CREATE_TIMEOUT_MS) or an executor spin with an arm ACK wait (60 ms) plus
+ * one 20 ms ping/sync, so the beat below stays well inside the 500 ms limit. */
 #include "net_task.h"
 #include <stdio.h>
 #include "task.h"
 #include "net_owner.h"
+#include "ros_entities_rcl.h"
 #include "shared_state.h"
 #include "hal_time.h"
 #include "hal_wifi.h"
@@ -51,7 +55,7 @@ void net_task(void *param) {
         /* Do not claim a functioning communication owner if platform setup failed. */
         for (;;) vTaskDelay(pdMS_TO_TICKS(100));
     }
-    net_owner_init(&s_owner);
+    net_owner_init(&s_owner, ros_rcl_backend(&s_owner.session));
     uint32_t next_radio_init = hal_now_ms(), reported_failures = 0;
     bool reported_ok = false;
     for (;;) {

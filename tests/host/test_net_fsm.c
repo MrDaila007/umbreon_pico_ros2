@@ -87,6 +87,20 @@ TEST(test_session_three_ping_failures_drop_and_success_resets) {
     s = umb_session_step(s, &in, &out); in.ping_done = true; in.ping_ok = true;
     s = umb_session_step(s, &in, &out); ASSERT_EQ(s.ping_failures, 0); ASSERT_TRUE(out.ready);
 }
+TEST(test_session_transport_failure_drops_ready_session_once) {
+    umb_session_in_t in; umb_session_t s = ready(&in); umb_session_out_t out;
+    in.create_done = false; in.now_ms = 10;
+    s = umb_session_step(s, &in, &out); ASSERT_TRUE(out.ready); ASSERT_FALSE(out.loss);
+    in.transport_failed = true;
+    s = umb_session_step(s, &in, &out);
+    ASSERT_TRUE(out.loss); ASSERT_FALSE(out.ready); ASSERT_EQ(out.action, UMB_SESSION_ACT_DESTROY);
+    s = umb_session_step(s, &in, &out); ASSERT_FALSE(out.loss); ASSERT_EQ(out.action, UMB_SESSION_ACT_NONE);
+    /* While pinging too. */
+    s = ready(&in); in.create_done = false; in.now_ms = 100;
+    s = umb_session_step(s, &in, &out); ASSERT_EQ(out.action, UMB_SESSION_ACT_PING);
+    in.transport_failed = true; s = umb_session_step(s, &in, &out);
+    ASSERT_TRUE(out.loss); ASSERT_EQ(out.action, UMB_SESSION_ACT_DESTROY);
+}
 TEST(test_session_partial_create_failure_still_destroys) {
     umb_session_in_t in = {.wifi_up = true, .endpoint_valid = true}; umb_session_out_t out;
     umb_session_t s = umb_session_step(umb_session_init(), &in, &out);
@@ -190,6 +204,7 @@ int main(void) {
     RUN_TEST(test_wifi_mode_changes_wait_for_session);
     RUN_TEST(test_session_ready_requires_entity_create_and_loss_precedes_teardown);
     RUN_TEST(test_session_three_ping_failures_drop_and_success_resets);
+    RUN_TEST(test_session_transport_failure_drops_ready_session_once);
     RUN_TEST(test_session_partial_create_failure_still_destroys);
     RUN_TEST(test_session_discovery_and_operation_deadlines_are_bounded);
     TEST_SUMMARY();

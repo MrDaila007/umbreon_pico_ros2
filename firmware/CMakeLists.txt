@@ -87,6 +87,10 @@ set(FW_SRCS
     app/net_wifi.c
     app/ros_commands.c
     app/ros_services.c
+    app/ros_entities.c
+    app/ros_entities_rcl.c
+    app/ros_messages.c
+    app/ros_session.c
     app/shared_state.c
     app/control_task.c
     app/console_task.c

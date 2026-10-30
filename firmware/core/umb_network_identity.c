@@ -13,6 +13,12 @@ bool umb_network_ssid(const uint8_t mac[6], char out[13]) {
     out[12] = 0;
     return true;
 }
+uint32_t umb_network_client_key(const uint8_t mac[6]) {
+    if (!mac) return 0;
+    uint32_t h = 2166136261u;
+    for (int i = 0; i < 6; i++) { h ^= mac[i]; h *= 16777619u; }
+    return h ? h : 1u;
+}
 static void generate(const uint8_t entropy[16], char *password) {
     static const char alphabet[] = UMB_AP_PASSWORD_ALPHABET;
     for (unsigned i = 0; i < UMB_AP_PASSWORD_LEN; i++) {

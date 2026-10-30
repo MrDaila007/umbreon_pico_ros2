@@ -220,10 +220,12 @@ events/service responses during normal operation; reset error state deliberately
   configured, bias-corrected yaw rate. Missing/stale IMU is diagnosed and not
   published as a fresh healthy sample.
 - Odometry: integrate signed measured speed and continuous yaw from the corrected
-  yaw rate, not normalized steering. Use monotonic sample intervals, ignore gaps
-  >=500 ms and invalid IMU/speed; never fabricate a yaw of zero as a good estimate.
-  With IMU invalid, freeze pose integration and advertise high/unknown pose
-  uncertainty; signed linear velocity may still be reported if finite. Reset
+  yaw rate, not normalized steering. Use monotonic sample intervals; a gap
+  > 200 ms (`UMB_ODOM_MAX_DT_MS`) re-seeds without integrating; invalid speed is not
+  integrated; never fabricate a yaw of zero as a good estimate. With IMU invalid,
+  position integrates along the last good yaw, yaw is held, and yaw (unknown) and
+  position (high) uncertainty are advertised; signed linear velocity may still be
+  reported if finite. Reset
   pose at firmware boot, retain through an agent reconnect, do not integrate a
   network outage as one giant interval. Use normalized yaw quaternion and
   explicit conservative covariance, with unobservable z/roll/pitch marked large.

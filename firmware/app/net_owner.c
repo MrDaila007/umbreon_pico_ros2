@@ -9,8 +9,10 @@
 
 static bool due(uint32_t now, uint32_t deadline) { return (int32_t)(now - deadline) >= 0; }
 
-void net_owner_init(net_owner_t *o) {
+void net_owner_init(net_owner_t *o, const ros_backend_t *ros) {
     memset(o, 0, sizeof *o);
+    o->ros = ros;
+    ros_session_init(&o->session);
     net_wifi_init(&o->wifi);
     net_endpoint_init(&o->endpoint);
     o->provision = umb_ap_provision_init();
@@ -20,7 +22,10 @@ void net_owner_init(net_owner_t *o) {
 void net_owner_set_radio_ready(net_owner_t *o, bool ready, uint32_t init_ms) {
     o->radio_ready = ready; o->radio_init_ms = init_ms;
     uint8_t mac[6];
-    if (ready && !o->ap_ssid[0] && hal_wifi_mac(mac)) (void)umb_network_ssid(mac, o->ap_ssid);
+    if (ready && !o->ap_ssid[0] && hal_wifi_mac(mac)) {
+        (void)umb_network_ssid(mac, o->ap_ssid);
+        o->client_key = umb_network_client_key(mac);
+    }
 }
 
 void net_owner_record_loop(net_owner_t *o, uint32_t duration_ms) {
@@ -43,20 +48,27 @@ static void copy_wifi_fields(umb_settings_t *dst, const umb_settings_t *src) {
 }
 
 /* Latch loss into shared state first: control sees it on its next tick even if
- * the link comes back before then, and no command of the old link survives. */
+ * the link comes back before then, and no command of the old link survives.
+ * agent_up only with WiFi and a ready session (full graph + executor). */
 static void set_link(net_owner_t *o, bool up) {
     if (o->wifi_up && !up) o->link_losses++;
-    shared_set_link(up, false); /* agent_up stays false until Task 9 sessions */
+    shared_set_link(up, up && o->session.ready);
     o->wifi_up = up;
 }
 
-/* Tear down everything bound to the current link. Task 9 destroys session
- * entities here, before the probe socket. False keeps ownership for a retry. */
+static bool session_held(const net_owner_t *o) {
+    return o->session.ready || ros_session_busy(&o->session);
+}
+
+/* Tear down everything bound to the current link: session entities and its
+ * socket first, then the probe socket. Callers latch the loss before. False
+ * keeps ownership for a retry. */
 static bool release_resources(net_owner_t *o) {
+    bool session_released = !session_held(o) || ros_session_teardown(&o->session, o->ros);
     bool closed = net_endpoint_close(&o->endpoint);
     o->probe_owned = !closed;
     o->round_failures = 0;
-    return closed;
+    return closed && session_released;
 }
 
 /* Radio start/stop SDK calls block for hundreds of ms; never while armed. */
@@ -141,7 +153,7 @@ static void run_endpoint(net_owner_t *o, bool up, bool may_block) {
                           o->endpoint.port != o->active.agent_port;
     if (mode != o->endpoint_mode || config_changed || due(now, o->next_refresh_ms)) {
         if (net_endpoint_refresh(&o->endpoint, mode, o->active.agent_ip, o->active.agent_port))
-            o->endpoint_losses++; /* Task 9: drop the session (loss first) here */
+            o->endpoint_losses++; /* run_session drops the session (loss first) */
         if (mode != o->endpoint_mode || config_changed) { o->round_failures = 0; o->next_probe_ms = now; }
         o->endpoint_mode = mode;
         o->next_refresh_ms = now + NET_OWNER_REFRESH_MS;
@@ -159,6 +171,32 @@ static void run_endpoint(net_owner_t *o, bool up, bool may_block) {
         o->round_failures = 0;
         o->next_probe_ms = hal_now_ms() + NET_OWNER_ROUND_RETRY_MS;
     }
+}
+
+/* Session after endpoint refresh: a lost/changed endpoint drops it this
+ * iteration. Skipped in radio start/stop iterations (one blocking op each). */
+static void run_session(net_owner_t *o, bool up, bool may_block) {
+    if (!may_block) return;
+    ros_session_in_t in = {
+        .now_ms = hal_now_ms(), .link_up = up,
+        .endpoint_selected = o->endpoint.policy.selected && o->client_key != 0,
+        .endpoint = {o->endpoint.policy.selected_ip, o->active.agent_port,
+                     o->active.ros_domain_id, o->client_key},
+        .generation = shared_session_generation()};
+    ros_session_out_t out = ros_session_step(&o->session, &in, o->ros);
+    set_link(o, up); /* publishes agent_up = ready; a dropped session latches loss here */
+    if (out.teardown) (void)ros_session_teardown(&o->session, o->ros);
+}
+
+static void publish_session(const ros_session_t *s, shared_network_t *n) {
+    n->session_stage = (uint8_t)s->fsm.stage;
+    n->session_ready = s->ready; n->session_busy = ros_session_busy(s);
+    n->time_synced = s->sync.synced;
+    n->sync_age_ms = s->sync.synced ? hal_now_ms() - s->last_sync_ms : 0;
+    n->session_generation = s->generation; n->sessions = s->sessions;
+    n->session_losses = s->losses; n->session_create_failures = s->create_failures;
+    n->session_transport_failures = s->transport_failures;
+    n->ping_failures = s->ping_failures; n->sync_failures = s->sync_failures;
 }
 
 static void publish(const net_owner_t *o) {
@@ -180,6 +218,7 @@ static void publish(const net_owner_t *o) {
     n.wifi_errors = o->wifi_errors; n.reconfigures = o->reconfigures;
     n.link_losses = o->link_losses; n.endpoint_losses = o->endpoint_losses;
     n.loop_last_ms = o->loop_last_ms; n.loop_max_ms = o->loop_max_ms; n.radio_init_ms = o->radio_init_ms;
+    publish_session(&o->session, &n);
     shared_publish_network(&n);
 }
 
@@ -188,13 +227,14 @@ void net_owner_step(net_owner_t *o) {
     shared_get_settings(&latest);
     /* Endpoint fields apply in place: reconcile cancels probes/selection. */
     o->active.agent_ip = latest.agent_ip; o->active.agent_port = latest.agent_port;
+    o->active.ros_domain_id = latest.ros_domain_id; /* a change reconnects the session */
     if (!o->radio_ready) set_link(o, false);
     else if (!wifi_fields_equal(&o->active, &latest)) reconfigure(o, &latest);
     else if (!maybe_provision(o)) {
         uint8_t pending = o->wifi.deferred_actions;
         /* Armed: busy defers radio I/O and the autonomous AP->STA retry; loss is
          * still reported (and disarms), so the wait is about one control tick. */
-        bool busy = o->probe_owned || !radio_ops_allowed();
+        bool busy = o->probe_owned || session_held(o) || !radio_ops_allowed();
         net_wifi_result_t r = net_wifi_step(&o->wifi, &o->active, busy);
         if (r.action_failed) o->wifi_errors++;
         bool radio_io = pending && !o->wifi.deferred_actions;
@@ -202,6 +242,7 @@ void net_owner_step(net_owner_t *o) {
         set_link(o, up);
         if (r.loss || r.needs_teardown) (void)release_resources(o);
         run_endpoint(o, up, !radio_io);
+        run_session(o, up, !radio_io);
     }
     memset(&latest, 0, sizeof latest);
     publish(o);

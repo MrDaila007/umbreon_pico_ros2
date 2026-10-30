@@ -9,6 +9,7 @@
 #include "hal_rand.h"
 #include "hal_udp_transport.h"
 #include "umb_network_identity.h"
+#include "fake_ros_backend.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include <string.h>
@@ -32,6 +33,8 @@ static int assoc_count;
 static uint32_t agent_ip, broadcast_reply, last_probe_ip;
 static uint16_t agent_port, last_probe_port;
 static bool last_probe_broadcast;
+static fake_ros_t ros;
+static ros_backend_t ros_backend;
 
 uint32_t hal_now_ms(void) { return now; }
 TickType_t xTaskGetTickCount(void) { return now; }
@@ -106,8 +109,10 @@ static umb_settings_t base(int mode) {
     s.agent_ip = STA_AGENT; s.agent_port = 8888;
     return s;
 }
+static void count_blocking(void *user) { (void)user; blocking_calls_in_step++; }
 static void boot(net_owner_t *o, const umb_settings_t *s) {
-    shared_init(s); persisted = *s; net_owner_init(o); net_owner_set_radio_ready(o, true, 0);
+    fake_ros_reset(&ros); ros.on_blocking = count_blocking; ros_backend = fake_ros_backend(&ros);
+    shared_init(s); persisted = *s; net_owner_init(o, &ros_backend); net_owner_set_radio_ready(o, true, 0);
 }
 static void step(net_owner_t *o) {
     blocking_calls_in_step = 0;
@@ -141,10 +146,12 @@ static void add_client(size_t i, uint32_t ip, uint8_t last) {
 
 TEST(test_offline_radio_never_touches_adapters) {
     umb_settings_t s = base(UMB_WIFI_AUTO); net_owner_t o;
-    shared_init(&s); net_owner_init(&o);
+    fake_ros_reset(&ros); ros_backend = fake_ros_backend(&ros);
+    shared_init(&s); net_owner_init(&o, &ros_backend);
     for (int i = 0; i < 100; i++) step(&o);
     ASSERT_EQ(sta_starts + ap_starts + probe_calls + flash_calls, 0);
     ASSERT_FALSE(wifi_link()); ASSERT_FALSE(net().radio_ready);
+    ASSERT_EQ(ros.creates, 0);
 }
 TEST(test_sta_join_is_async_and_configured_ip_selected) {
     umb_settings_t s = base(UMB_WIFI_AUTO); net_owner_t o; boot(&o, &s);
@@ -160,8 +167,8 @@ TEST(test_sta_join_is_async_and_configured_ip_selected) {
     shared_network_t n = net();
     ASSERT_TRUE(n.endpoint_selected); ASSERT_EQ(n.endpoint_ip, STA_AGENT);
     ASSERT_EQ(n.endpoint_method, UMB_ENDPOINT_CONFIGURED); ASSERT_EQ(n.local_ip, 0x0a000002u);
-    /* Selection alone never marks the agent session up (Task 9 owns that). */
-    ASSERT_FALSE(agent_link());
+    /* Selection alone never marks the agent session up: entities come first. */
+    ASSERT_FALSE(agent_link()); ASSERT_TRUE(ros.live != (1u << ROS_ENT_COUNT) - 1u);
     unsigned probes = probe_calls; run(&o, 2000); ASSERT_EQ(probe_calls, probes);
     ASSERT_EQ(flash_calls, 0); /* provisioned device: no boot write */
     ASSERT_TRUE(max_blocking_in_step <= 1);
@@ -315,7 +322,7 @@ TEST(test_defaults_keep_password_and_never_reprovision) {
     ASSERT_TRUE(strcmp(ap_pass_used, first) == 0);
     /* Fresh boot of a provisioned device whose RAM copy is empty: no write either. */
     umb_settings_t ram = persisted; ram.ap_pass[0] = 0;
-    shared_init(&ram); net_owner_init(&o); net_owner_set_radio_ready(&o, true, 0);
+    shared_init(&ram); net_owner_init(&o, &ros_backend); net_owner_set_radio_ready(&o, true, 0);
     ap_started = false; run(&o, 20000);
     ASSERT_EQ(flash_calls, 1); ASSERT_TRUE(ap_started); ASSERT_TRUE(strcmp(ap_pass_used, first) == 0);
 }
@@ -340,6 +347,86 @@ TEST(test_radio_starts_deferred_while_armed) {
     shared_publish_outputs(&idle); sta_reachable = true; run(&o, 200);
     ASSERT_EQ(sta_starts, 2); ASSERT_TRUE(wifi_link()); ASSERT_TRUE(max_blocking_in_step <= 1);
 }
+
+/* ---- ROS session integration -------------------------------------------- */
+static unsigned destroys_with_agent_up, destroys_before_loss;
+static uint32_t gen_at_ready;
+static void check_destroy(void *user, ros_entity_id_t id) {
+    (void)id; (void)user;
+    bool w, a; shared_get_link(&w, &a);
+    if (a) destroys_with_agent_up++;
+    if (shared_session_generation() == gen_at_ready) destroys_before_loss++;
+}
+static bool run_until_agent(net_owner_t *o, unsigned max_steps) {
+    for (unsigned i = 0; i < max_steps; i++) { step(o); if (agent_link()) return true; }
+    return false;
+}
+TEST(test_agent_up_only_after_full_graph_with_current_generation) {
+    umb_settings_t s = base(UMB_WIFI_STA_ONLY); s.ros_domain_id = 17; net_owner_t o; boot(&o, &s);
+    ASSERT_TRUE(run_until_agent(&o, 200));
+    ASSERT_EQ(ros.live, (1u << ROS_ENT_COUNT) - 1u);
+    uint32_t gen = shared_session_generation();
+    ASSERT_EQ(ros.generation, gen); ASSERT_TRUE(shared_session_ready(gen));
+    ASSERT_EQ(ros.last_cfg.agent_ip, STA_AGENT); ASSERT_EQ(ros.last_cfg.agent_port, 8888);
+    ASSERT_EQ(ros.last_cfg.domain_id, 17);
+    uint8_t mac[6] = {2, 1, 2, 3, 0xab, 0xcd};
+    ASSERT_EQ(ros.last_cfg.client_key, umb_network_client_key(mac));
+    shared_network_t n = net();
+    ASSERT_TRUE(n.session_ready); ASSERT_EQ(n.session_generation, gen); ASSERT_EQ(n.sessions, 1);
+    run(&o, 1000); ASSERT_TRUE(agent_link()); ASSERT_TRUE(net().time_synced);
+    ASSERT_TRUE(max_blocking_in_step <= 1);
+}
+TEST(test_agent_loss_latched_before_entities_finalized_then_fresh_session) {
+    umb_settings_t s = base(UMB_WIFI_STA_ONLY); net_owner_t o; boot(&o, &s);
+    ASSERT_TRUE(run_until_agent(&o, 200));
+    gen_at_ready = shared_session_generation();
+    destroys_with_agent_up = destroys_before_loss = 0; ros.on_destroy = check_destroy;
+    ros.agent_alive = false;
+    unsigned guard = 0;
+    while (agent_link() && guard++ < 60) step(&o);
+    ASSERT_FALSE(agent_link()); ASSERT_TRUE(guard * 10 <= 400); /* loss declared within 400 ms */
+    ASSERT_EQ(ros.live, 0); ASSERT_FALSE(ros.transport_open);
+    ASSERT_EQ(destroys_with_agent_up, 0); ASSERT_EQ(destroys_before_loss, 0);
+    shared_control_mailbox_t box; shared_take_control_mailbox(&box);
+    ASSERT_TRUE(box.loss_mask & UMB_STOP_AGENT); ASSERT_TRUE(wifi_link());
+    ASSERT_FALSE(shared_session_ready(gen_at_ready));
+    ros.agent_alive = true; unsigned creates = ros.creates;
+    ASSERT_TRUE(run_until_agent(&o, 400));
+    ASSERT_EQ(ros.creates - creates, ROS_ENT_COUNT); /* every entity created afresh */
+    ASSERT_TRUE(ros.generation != gen_at_ready); ASSERT_TRUE(shared_session_ready(ros.generation));
+    ASSERT_EQ(net().session_losses, 1); ASSERT_EQ(net().sessions, 2);
+    ros.on_destroy = NULL;
+}
+TEST(test_wifi_loss_and_reconfigure_release_session_first) {
+    umb_settings_t s = base(UMB_WIFI_STA_ONLY); net_owner_t o; boot(&o, &s);
+    ASSERT_TRUE(run_until_agent(&o, 200));
+    gen_at_ready = shared_session_generation();
+    destroys_with_agent_up = destroys_before_loss = 0; ros.on_destroy = check_destroy;
+    sta_reachable = false; step(&o);
+    ASSERT_FALSE(wifi_link()); ASSERT_FALSE(agent_link()); ASSERT_EQ(ros.live, 0);
+    ASSERT_EQ(destroys_with_agent_up, 0); ASSERT_EQ(destroys_before_loss, 0);
+    sta_reachable = true; ASSERT_TRUE(run_until_agent(&o, 400));
+    /* WiFi edit with a socket the stack refuses to close: radio waits for it. */
+    control_tick(); /* control consumes the earlier loss (disarm) before the edit */
+    ros.release_ok = false; gen_at_ready = shared_session_generation(); stops = 0;
+    umb_settings_t edit; uint32_t rev = shared_settings_snapshot(&edit);
+    edit.wifi_mode = UMB_WIFI_AP_ONLY; ASSERT_TRUE(shared_commit_settings(&edit, rev, false));
+    run(&o, 300);
+    ASSERT_FALSE(agent_link()); ASSERT_FALSE(wifi_link()); ASSERT_EQ(ros.live, 0);
+    ASSERT_EQ(stops, 0); ASSERT_EQ(o.reconfigures, 0); ASSERT_EQ(destroys_with_agent_up, 0);
+    ros.release_ok = true; run(&o, 100);
+    ASSERT_EQ(o.reconfigures, 1); ASSERT_EQ(stops_with_link_up, 0); ASSERT_FALSE(ros.transport_open);
+    ros.on_destroy = NULL;
+}
+TEST(test_endpoint_edit_reconnects_session_on_new_port) {
+    umb_settings_t s = base(UMB_WIFI_STA_ONLY); net_owner_t o; boot(&o, &s);
+    ASSERT_TRUE(run_until_agent(&o, 200));
+    umb_settings_t edit; uint32_t rev = shared_settings_snapshot(&edit);
+    edit.agent_port = 7777; ASSERT_TRUE(shared_commit_settings(&edit, rev, false));
+    step(&o); ASSERT_FALSE(agent_link()); ASSERT_EQ(ros.live, 0);
+    agent_port = 7777; ASSERT_TRUE(run_until_agent(&o, 400));
+    ASSERT_EQ(ros.last_cfg.agent_port, 7777);
+}
 int main(void) {
     RUN_TEST(test_offline_radio_never_touches_adapters);
     RUN_TEST(test_sta_join_is_async_and_configured_ip_selected);
@@ -353,5 +440,9 @@ int main(void) {
     RUN_TEST(test_defaults_keep_password_and_never_reprovision);
     RUN_TEST(test_unsaved_edit_not_flashed_by_provisioning);
     RUN_TEST(test_radio_starts_deferred_while_armed);
+    RUN_TEST(test_agent_up_only_after_full_graph_with_current_generation);
+    RUN_TEST(test_agent_loss_latched_before_entities_finalized_then_fresh_session);
+    RUN_TEST(test_wifi_loss_and_reconfigure_release_session_first);
+    RUN_TEST(test_endpoint_edit_reconnects_session_on_new_port);
     TEST_SUMMARY();
 }

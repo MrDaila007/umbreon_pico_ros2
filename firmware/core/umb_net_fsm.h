@@ -41,6 +41,7 @@ typedef struct {
     bool wifi_up, endpoint_valid, endpoint_changed;
     bool find_done, probe_done, probe_ok, create_done, create_ok;
     bool ping_done, ping_ok, destroy_done;
+    bool transport_failed; /* repeated actual rcl/transport errors (not executor timeouts) */
 } umb_session_in_t;
 typedef struct { umb_session_action_t action; bool loss, ready; } umb_session_out_t;
 umb_session_t umb_session_init(void);

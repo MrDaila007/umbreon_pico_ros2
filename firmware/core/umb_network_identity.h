@@ -9,6 +9,9 @@
 typedef struct { char ssid[13]; char password[64]; bool generated; } umb_network_identity_t;
 /* "umbreon-XXXX" from the last two MAC bytes; false on NULL. */
 bool umb_network_ssid(const uint8_t mac[6], char out[13]);
+/* Stable XRCE client key for this device: FNV-1a over the whole MAC, never 0
+ * (0 only for NULL). Reconnects reuse it so the agent replaces the old session. */
+uint32_t umb_network_client_key(const uint8_t mac[6]);
 /* Empty existing password generates UMB_AP_PASSWORD_LEN chars from entropy.
  * Existing WPA2 passwords are accepted only at 8..63 bytes; NULL inputs rejected. */
 bool umb_network_identity(const uint8_t mac[6], const uint8_t entropy[16],

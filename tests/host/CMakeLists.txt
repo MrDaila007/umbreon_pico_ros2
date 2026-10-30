@@ -129,13 +129,43 @@ target_include_directories(test_ros_services PRIVATE
 # Network owner end to end: real owner, WiFi/endpoint bridges, provisioning
 # coordinator and shared state under fake time, radio, sockets and flash.
 target_sources(test_net_owner PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../net/fakes/fake_ros_backend.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/ros_session.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/ros_entities.c
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/net_owner.c
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/net_wifi.c
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/net_endpoint.c
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/settings_apply.c
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/shared_state.c)
 target_include_directories(test_net_owner PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../net/fakes
   ${CMAKE_CURRENT_SOURCE_DIR}/task_stubs
   ${CMAKE_CURRENT_SOURCE_DIR}/../net/stubs
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)
+
+# Production ROS graph and partial-creation tracker under the fake rcl backend.
+target_sources(test_ros_entities PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../net/fakes/fake_ros_backend.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/ros_entities.c)
+target_include_directories(test_ros_entities PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../net/fakes
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app)
+
+# Session lifecycle: readiness, loss detection, reverse cleanup, recovery.
+target_sources(test_ros_session PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../net/fakes/fake_ros_backend.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/ros_session.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/ros_entities.c)
+target_include_directories(test_ros_session PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../net/fakes
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app)
+
+# Bounded message storage against the generated micro-ROS message structs only
+# (headers; nothing from libmicroros is linked on the host).
+target_sources(test_ros_messages PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/ros_messages.c)
+target_include_directories(test_ros_messages PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/task_stubs
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../micro_ros/libmicroros/include)

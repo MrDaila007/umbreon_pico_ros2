@@ -99,6 +99,11 @@ typedef struct {
     char ap_ssid[13];
     uint32_t probes, probe_failures, wifi_errors, reconfigures, link_losses;
     uint32_t endpoint_losses, ap_pass_failures, loop_last_ms, loop_max_ms, radio_init_ms;
+    /* micro-ROS session (Task 9): ready only with the full graph + executor. */
+    uint8_t session_stage;  /* umb_session_stage_t */
+    bool session_ready, session_busy, time_synced;
+    uint32_t session_generation, sessions, session_losses, session_create_failures;
+    uint32_t session_transport_failures, ping_failures, sync_failures, sync_age_ms;
 } shared_network_t;
 void shared_publish_network(const shared_network_t *n);
 void shared_get_network(shared_network_t *out);

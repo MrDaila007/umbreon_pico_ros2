@@ -17,6 +17,9 @@
 #include <diagnostic_msgs/msg/detail/diagnostic_status__rosidl_typesupport_microxrcedds_c.h>
 #include <rosidl_typesupport_microxrcedds_c/message_type_support.h>
 #include <uxr/client/config.h>
+#include <geometry_msgs/msg/detail/twist__rosidl_typesupport_microxrcedds_c.h>
+#include <std_srvs/srv/detail/set_bool__rosidl_typesupport_microxrcedds_c.h>
+#include "ros_messages.h"
 
 #define TS(pkg, name) ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_microxrcedds_c, pkg, msg, name)()
 #define MAX_PAIRS 12
@@ -59,10 +62,14 @@ static void check(const char *name, const rosidl_message_type_support_t *ts, con
     size_t size = cb->get_serialized_size(msg);
     ucdrBuffer b;
     ucdr_init_buffer(&b, bytes, sizeof bytes);
-    if (!cb->cdr_serialize(msg, &b) || b.error || ucdr_buffer_length(&b) != size ||
-        size + OVERHEAD_BUDGET > sizeof bytes) {
+    /* The generated size function may over-estimate by trailing alignment
+     * padding (strings ending off a 4-byte boundary inside a sequence); rmw
+     * reserves that size, so it is the bound checked, never less than written. */
+    if (!cb->cdr_serialize(msg, &b) || b.error || ucdr_buffer_length(&b) > size ||
+        size - ucdr_buffer_length(&b) > 3u || size + OVERHEAD_BUDGET > sizeof bytes) {
         put("FAIL "); put(name); put(" size="); number(size); put("\n"); wire_exit(1);
     }
+    size_t written = ucdr_buffer_length(&b);
     static uxrSession session;
     uxrCommunication comm = {.send_msg = capture, .mtu = sizeof bytes};
     uxr_init_session(&session, &comm, 0x12345678u);
@@ -77,10 +84,41 @@ static void check(const char *name, const rosidl_message_type_support_t *ts, con
     if (packet_size < size || packet_size > sizeof bytes || packet_size - size > OVERHEAD_BUDGET) {
         put("FAIL XRCE packet size\n"); wire_exit(1);
     }
-    put(name); put(" CDR="); number(size); put(" actual-XRCE-packet="); number(packet_size);
+    put(name); put(" CDR="); number(size);
+    if (written != size) { put(" (serialized="); number(written); put(")"); }
+    put(" actual-XRCE-packet="); number(packet_size);
     put(" overhead="); number(packet_size - size); put("\n");
 }
+/* The production storage itself, filled at its bounds by the real adapters. */
+static ros_messages_t prod;
+static ros_telemetry_t tele;
+static bool keep(void *ctx, ros_entity_id_t id, const void *msg) { (void)ctx; (void)id; (void)msg; return true; }
+static void check_production(void) {
+    ros_messages_reset(&prod); ros_telemetry_init(&tele);
+    umb_time_sync_t sync = umb_time_sync_init();
+    (void)umb_time_sync_set(&sync, 1700000000000000000ll, 1000);
+    shared_sensors_t s = {0};
+    for (int i = 0; i < UMB_TOF_COUNT; i++) { s.tof_mm[i] = 1234; s.tof_stamp_ms[i] = 1000; }
+    s.tof_online_mask = 0x3f; s.imu_ok = true; s.imu_stamp_ms = 1000; s.bat_have = true; s.bat_v = 7.4f;
+    ros_diag_info_t diag = {4294967295u, 4294967295u, 4294967295u, 4294967295u}; /* widest values */
+    ros_telemetry_session_start(&tele, 1000);
+    (void)ros_telemetry_tick(&tele, &prod, &s, 1.0f, 1000, &sync, &diag, keep, NULL);
+    char longest[ROS_ARM_MESSAGE_MAX + 8];
+    memset(longest, 'x', sizeof longest - 1); longest[sizeof longest - 1] = 0;
+    ros_messages_arm_reply(&prod, true, longest);
+    for (int i = 0; i < UMB_TOF_COUNT; i++) check("prod Range", TS(sensor_msgs, Range), &prod.range[i]);
+    check("prod Imu", TS(sensor_msgs, Imu), &prod.imu);
+    check("prod Odometry", TS(nav_msgs, Odometry), &prod.odom);
+    check("prod BatteryState", TS(sensor_msgs, BatteryState), &prod.battery);
+    check("prod reflex DiagnosticStatus", TS(diagnostic_msgs, DiagnosticStatus), &prod.reflex);
+    check("prod DiagnosticArray", TS(diagnostic_msgs, DiagnosticArray), &prod.diagnostics);
+    check("prod Twist", TS(geometry_msgs, Twist), &prod.cmd[0]);
+    check("prod SetBool_Response",
+          ROSIDL_TYPESUPPORT_INTERFACE__MESSAGE_SYMBOL_NAME(rosidl_typesupport_microxrcedds_c, std_srvs, srv, SetBool_Response)(),
+          &prod.arm_response);
+}
 int main(void) {
+    check_production();
     nav_msgs__msg__Odometry odom = {0};
     odom.header.frame_id = str(text31); odom.child_frame_id = str(text31);
     check("Odometry", TS(nav_msgs, Odometry), &odom);

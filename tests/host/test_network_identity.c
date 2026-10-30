@@ -43,7 +43,22 @@ TEST(test_identity_alphabet_is_unambiguous_and_uses_all_entropy_bits) {
     ASSERT_TRUE(umb_network_ssid(m2, ssid)); ASSERT_TRUE(strcmp(ssid, "umbreon-0FA0") == 0);
     ASSERT_FALSE(umb_network_ssid(NULL, ssid));
 }
+TEST(test_client_key_is_device_unique_nonzero_and_stable) {
+    uint8_t a[6] = {2, 1, 2, 3, 0xab, 0xcd}, b[6] = {2, 1, 2, 3, 0xab, 0xce};
+    uint8_t c[6] = {3, 1, 2, 3, 0xab, 0xcd}, zero[6] = {0};
+    uint32_t ka = umb_network_client_key(a);
+    ASSERT_TRUE(ka != 0); ASSERT_EQ(umb_network_client_key(a), ka);
+    ASSERT_TRUE(umb_network_client_key(b) != ka); ASSERT_TRUE(umb_network_client_key(c) != ka);
+    ASSERT_TRUE(umb_network_client_key(zero) != 0);
+    ASSERT_TRUE(umb_network_client_key(NULL) == 0u);
+    /* Every MAC bit changes the key: two cars on one agent never share a session. */
+    for (int bit = 0; bit < 48; bit++) {
+        uint8_t m[6]; memcpy(m, a, 6); m[bit / 8] ^= (uint8_t)(1u << (bit % 8));
+        ASSERT_TRUE(umb_network_client_key(m) != ka);
+    }
+}
 int main(void) {
+    RUN_TEST(test_client_key_is_device_unique_nonzero_and_stable);
     RUN_TEST(test_identity_preserves_existing_and_uses_mac_suffix);
     RUN_TEST(test_identity_generates_from_entropy_and_rejects_bad_inputs);
     RUN_TEST(test_identity_alphabet_is_unambiguous_and_uses_all_entropy_bits);

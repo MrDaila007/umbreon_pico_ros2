@@ -76,3 +76,49 @@ heap; free heap during entity creation is a separate runtime measurement.
 These are build/ABI probes, not evidence that the final12-publisher/8-service
 runtime fits dynamically. Recheck linker map, heap/stack and allocator use in
 Tasks5/9/13. No link-probe image was flashed.
+
+## Session lifecycle and production storage (Task 9)
+
+Implemented in firmware, not yet validated against a live agent (Task 13).
+
+- Graph (`firmware/app/ros_entities.c`): node `pico` in `/umbreon`; the 11
+  telemetry publishers, 3 command subscriptions (best-effort, volatile, keep-last
+  1) and `/umbreon/arm` (reliable service), one 10 ms scheduler timer and an
+  executor sized for 12 handles. `/umbreon/save_settings` (Task 11) and the
+  parameter server (Task 10) are reserved hooks: their handles are counted, the
+  entities are not created yet. `/umbreon/reflex` exists but is filled by Task 12.
+- Creation is one entity per network-task iteration with a 200 ms reliable
+  creation timeout; the session open is preceded by a fresh 50 ms XRCE ping.
+  `agent_up` is published only after every entity and the executor exist.
+  Callbacks carry generation 0 until then, so nothing queued during setup is
+  accepted. Client key: FNV-1a of the WiFi MAC; domain from `ros_domain_id`.
+- Loss: three failed 100 ms pings (20 ms each) or three consecutive spins with an
+  actual rcl/transport error (executor timeout is normal; a spin counts as an
+  error only if all its publishes failed) drop the session. The owner publishes
+  `agent_up=false` (latching the loss for control), then zeroes the
+  destroy-session timeout and finalizes all created entities in reverse order,
+  then force-closes the session socket. A socket that cannot be closed keeps the
+  session busy, defers radio reconfiguration and blocks re-creation.
+- Time: bounded 20 ms sync, retried every 100 ms until synchronized, then every
+  30 s; a failed resync keeps the offset; a new session invalidates it. No
+  telemetry is published before the first sync.
+- Messages (`firmware/app/ros_messages.c`): all strings/sequences point into fixed
+  buffers; generated init/fini are never called on them. Receive/request buffers
+  are reset for every new session.
+
+Measured with `make wire` on the production storage at its bounds:
+
+| Message | Reserved CDR bytes | Complete XRCE packet bytes |
+|---|---:|---:|
+| Range (each of 6) | 40 | 52 |
+| Imu | 320 | 332 |
+| Odometry | 720 | 732 |
+| BatteryState | 69 | 84 |
+| reflex DiagnosticStatus (empty, Task 12 fills) | 44 | 56 |
+| DiagnosticArray (1 status, 4 values) | 220 (219 written) | 232 |
+| Twist (received) | 48 | 60 |
+| SetBool response (63-char message) | 72 | 84 |
+
+The generated size function can exceed the written bytes by up to 3 bytes of
+trailing alignment padding (strings ending off a 4-byte boundary inside a
+sequence); rmw reserves the larger value, so the wire test checks that bound.
