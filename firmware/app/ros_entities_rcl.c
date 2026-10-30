@@ -26,6 +26,7 @@
 #include "hal_udp_transport.h"
 #include "ros_commands.h"
 #include "ros_messages.h"
+#include "ros_params_rcl.h"
 #include "ros_services.h"
 #include "shared_state.h"
 
@@ -198,6 +199,7 @@ static bool add_handle(const ros_entity_desc_t *d) {
     rclc_executor_t *e = &s_rcl.executor;
     switch (d->target) {
     case ROS_ENT_TIMER: return ok(rclc_executor_add_timer(e, &s_rcl.timer));
+    case ROS_ENT_PARAM_SERVER: return ros_params_rcl_add_to_executor(e);
     case ROS_ENT_SRV_ARM:
         return ok(rclc_executor_add_service(e, &s_rcl.arm, &s_rcl.msgs.arm_request,
                                             &s_rcl.msgs.arm_response, arm_cb));
@@ -228,6 +230,9 @@ static bool create(void *ctx, ros_entity_id_t id, const ros_entity_desc_t *d, co
     }
     case ROS_KIND_SERVICE:
         return create_service(&s_rcl.arm, ROSIDL_GET_SRV_TYPE_SUPPORT(std_srvs, srv, SetBool), d);
+    case ROS_KIND_PARAM_SERVER:
+        return ros_params_rcl_create(&s_rcl.node, rcl_context_get_rmw_context(&s_rcl.support.context),
+                                     ROS_CREATE_TIMEOUT_MS);
     case ROS_KIND_TIMER:
         s_rcl.timer = rcl_get_zero_initialized_timer();
         return ok(rclc_timer_init_default2(&s_rcl.timer, &s_rcl.support,
@@ -260,6 +265,7 @@ static void destroy(void *ctx, ros_entity_id_t id, const ros_entity_desc_t *d) {
     case ROS_KIND_PUBLISHER: fini(rcl_publisher_fini(&s_rcl.pub[id - ROS_ENT_PUB_RANGE_HR], &s_rcl.node)); break;
     case ROS_KIND_SUBSCRIPTION: fini(rcl_subscription_fini(&s_rcl.sub[d->index], &s_rcl.node)); break;
     case ROS_KIND_SERVICE: fini(rcl_service_fini(&s_rcl.arm, &s_rcl.node)); break;
+    case ROS_KIND_PARAM_SERVER: if (!ros_params_rcl_destroy(&s_rcl.node)) s_rcl.fini_errors++; break;
     case ROS_KIND_TIMER: fini(rcl_timer_fini(&s_rcl.timer)); break;
     case ROS_KIND_EXECUTOR: fini(rclc_executor_fini(&s_rcl.executor)); break; /* frees handles + wait set */
     case ROS_KIND_EXECUTOR_HANDLE: break; /* no own resource */
@@ -287,13 +293,16 @@ static void session_started(void *ctx) {
 }
 
 /* Executor timeout is normal. An error is an rcl failure, or a spin whose
- * publishes all failed (a single dropped datagram is not loss). */
+ * publishes all failed (a single dropped datagram is not loss). Console/UI
+ * changes are written into the parameter server only after the spin returned,
+ * never from inside a parameter callback. */
 static ros_spin_result_t spin(void *ctx) {
     (void)ctx;
     uint32_t published = s_rcl.telemetry.published, failed = s_rcl.telemetry.publish_failures;
     rcl_ret_t rc = rclc_executor_spin_some(&s_rcl.executor, RCL_MS_TO_NS(ROS_SPIN_TIMEOUT_MS));
     bool rcl_error = rc != RCL_RET_OK && rc != RCL_RET_TIMEOUT;
     if (rcl_error) rcl_reset_error();
+    ros_params_rcl_reconcile();
     bool publish_error = s_rcl.telemetry.publish_failures != failed && s_rcl.telemetry.published == published;
     return rcl_error || publish_error ? ROS_SPIN_ERROR : ROS_SPIN_OK;
 }
@@ -322,5 +331,6 @@ const ros_backend_t *ros_rcl_backend(const ros_session_t *session) {
     hal_udp_transport_init(&s_rcl.transport, 0, 0);
     ros_messages_reset(&s_rcl.msgs);
     ros_telemetry_init(&s_rcl.telemetry); /* boot pose */
+    ros_params_rcl_boot();
     return &k_backend;
 }

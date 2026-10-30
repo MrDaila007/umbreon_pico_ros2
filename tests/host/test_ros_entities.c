@@ -37,7 +37,7 @@ TEST(test_graph_names_qos_and_counts_match_contract) {
     ASSERT_EQ(ros_entity_desc(ROS_ENT_SUB_CMD_VEL)->index, 0);   /* UMB_ROS_CMD_VEL */
     ASSERT_EQ(ros_entity_desc(ROS_ENT_SUB_CMD_TELEOP)->index, 1);
     ASSERT_EQ(ros_entity_desc(ROS_ENT_SUB_CMD_RAW)->index, 2);
-    unsigned pubs = 0, subs = 0, srvs = 0, timers = 0, handles = 0;
+    unsigned pubs = 0, subs = 0, srvs = 0, timers = 0, handles = 0, params = 0, weight = 0;
     for (int id = 0; id < ROS_ENT_COUNT; id++) {
         const ros_entity_desc_t *d = ros_entity_desc((ros_entity_id_t)id);
         ASSERT_TRUE(d != NULL);
@@ -49,21 +49,32 @@ TEST(test_graph_names_qos_and_counts_match_contract) {
         case ROS_KIND_SERVICE: srvs++; ASSERT_EQ(d->reliability, ROS_QOS_RELIABLE);
             /* Contract: reliable service responses confirm within <= 20 ms. */
             ASSERT_TRUE(d->reply_timeout_ms > 0 && d->reply_timeout_ms <= 20); break;
+        case ROS_KIND_PARAM_SERVER: params++;
+            /* rclc low-memory server: 6 services + event publisher, created in one bounded step. */
+            ASSERT_EQ(d->reliability, ROS_QOS_RELIABLE);
+            ASSERT_TRUE(d->reply_timeout_ms > 0 && d->reply_timeout_ms <= 20);
+            ASSERT_TRUE(strcmp(d->name, "/umbreon/pico") == 0); break;
         case ROS_KIND_TIMER: timers++; break;
         case ROS_KIND_EXECUTOR_HANDLE: {
             handles++;
+            weight += ros_entity_desc(d->target)->kind == ROS_KIND_PARAM_SERVER ? ROS_PARAM_SERVER_HANDLES : 1u;
             /* Dispatches an entity created earlier, after the executor itself. */
             ASSERT_TRUE(d->target < ROS_ENT_EXECUTOR && id > ROS_ENT_EXECUTOR);
             ros_entity_kind_t k = ros_entity_desc(d->target)->kind;
-            ASSERT_TRUE(k == ROS_KIND_SUBSCRIPTION || k == ROS_KIND_SERVICE || k == ROS_KIND_TIMER);
+            ASSERT_TRUE(k == ROS_KIND_SUBSCRIPTION || k == ROS_KIND_SERVICE || k == ROS_KIND_TIMER ||
+                      k == ROS_KIND_PARAM_SERVER);
             break;
         }
         default: ASSERT_TRUE(d->name == NULL); break;
         }
     }
     ASSERT_EQ(pubs, 11); ASSERT_EQ(subs, 3); ASSERT_EQ(srvs, 1); ASSERT_EQ(timers, 1);
-    ASSERT_EQ(handles, subs + srvs + timers);
-    ASSERT_EQ(ROS_EXECUTOR_HANDLES, 12); ASSERT_TRUE(handles <= ROS_EXECUTOR_HANDLES);
+    ASSERT_EQ(params, 1); ASSERT_EQ(handles, subs + srvs + params + timers);
+    /* Executor capacity: 3 subs + arm + 6 parameter handles + timer = 11 of 12; 1 reserved for save. */
+    ASSERT_EQ(ROS_EXECUTOR_HANDLES, 12); ASSERT_EQ(weight, 11); ASSERT_TRUE(weight <= ROS_EXECUTOR_HANDLES);
+    ASSERT_EQ(ROS_PARAM_SERVER_HANDLES, 6);
+    ASSERT_TRUE(ROS_ENT_PARAM_SERVER > ROS_ENT_SRV_ARM && ROS_ENT_PARAM_SERVER < ROS_ENT_TIMER);
+    ASSERT_TRUE(ROS_PARAM_CREATE_BUDGET_MS < 500u - 100u); /* inside one core-0 beat window */
     ASSERT_TRUE(ros_entity_desc(ROS_ENT_COUNT) == NULL);
     ASSERT_TRUE(strcmp(ROS_NODE_NAME, "pico") == 0 && strcmp(ROS_NODE_NAMESPACE, "/umbreon") == 0);
 }

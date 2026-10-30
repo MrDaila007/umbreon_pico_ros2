@@ -16,7 +16,7 @@ static bool create(void *ctx, ros_entity_id_t id, const ros_entity_desc_t *d, co
     }
     if (id == ROS_ENT_CONTEXT) { f->transport_open = true; if (!f->agent_alive) return false; }
     if (id > ROS_ENT_CONTEXT && !f->agent_alive) return false;
-    if (d->kind == ROS_KIND_SERVICE) f->service_reply_timeout_ms = d->reply_timeout_ms;
+    if (d->kind == ROS_KIND_SERVICE || d->kind == ROS_KIND_PARAM_SERVER) f->service_reply_timeout_ms = d->reply_timeout_ms;
     record(f, 'c', (int)id);
     f->live |= 1u << id;
     return true;

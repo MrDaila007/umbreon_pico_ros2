@@ -325,6 +325,55 @@ TEST(test_padding_garbage_does_not_matter) {
     ASSERT_TRUE(memcmp(b1, b2, n1) == 0);
 }
 
+TEST(test_typed_numeric_access_ranges_and_types) {
+    umb_settings_t s = umb_settings_defaults(), o;
+    umb_settings_numeric_info_t info;
+    ASSERT_TRUE(umb_settings_numeric_info("cmd_timeout_ms", &info));
+    ASSERT_FALSE(info.is_float); ASSERT_EQ(info.min, 100); ASSERT_EQ(info.max, 1000);
+    ASSERT_TRUE(umb_settings_numeric_info("pid_kp", &info));
+    ASSERT_TRUE(info.is_float); ASSERT_EQ(info.max, 5000);
+    ASSERT_TRUE(umb_settings_numeric_info("agent_ip", &info));
+    ASSERT_EQ(info.min, 0); ASSERT_TRUE(info.max == 4294967295.0);
+    ASSERT_FALSE(umb_settings_numeric_info("wifi_pass", &info));
+    ASSERT_FALSE(umb_settings_numeric_info("nope", &info));
+    int64_t i; double d;
+    ASSERT_TRUE(umb_settings_set_int(&s, "cmd_timeout_ms", 400, &o));
+    ASSERT_TRUE(umb_settings_get_int(&o, "cmd_timeout_ms", &i)); ASSERT_EQ(i, 400);
+    ASSERT_FALSE(umb_settings_set_int(&s, "cmd_timeout_ms", 99, &o));
+    ASSERT_FALSE(umb_settings_set_int(&s, "cmd_timeout_ms", 4294967296ll + 400, &o)); /* no wrap */
+    ASSERT_FALSE(umb_settings_set_int(&s, "cmd_timeout_ms", INT64_MIN, &o));
+    ASSERT_FALSE(umb_settings_set_int(&s, "pid_kp", 1, &o));      /* wrong class */
+    ASSERT_FALSE(umb_settings_set_float(&s, "cmd_timeout_ms", 200.0, &o));
+    ASSERT_FALSE(umb_settings_set_int(&s, "wifi_ssid", 1, &o));
+    ASSERT_TRUE(umb_settings_set_int(&s, "agent_ip", 181015702, &o));
+    ASSERT_EQ(o.agent_ip, 0x0aca1496u); /* 10.202.20.150 */
+    ASSERT_TRUE(umb_settings_set_int(&s, "agent_ip", 4294967295ll, &o));
+    ASSERT_FALSE(umb_settings_set_int(&s, "agent_ip", 4294967296ll, &o));
+    ASSERT_FALSE(umb_settings_set_int(&s, "agent_ip", -1, &o));
+    ASSERT_TRUE(umb_settings_set_int(&s, "servo_reverse", 1, &o)); ASSERT_TRUE(o.servo_reverse);
+    ASSERT_FALSE(umb_settings_set_int(&s, "servo_reverse", 2, &o));
+    ASSERT_TRUE(umb_settings_set_float(&s, "pid_kp", 12.5, &o));
+    ASSERT_TRUE(umb_settings_get_float(&o, "pid_kp", &d)); ASSERT_EQ(d, 12.5);
+    ASSERT_FALSE(umb_settings_set_float(&s, "pid_kp", NAN, &o));
+    ASSERT_FALSE(umb_settings_set_float(&s, "pid_kp", INFINITY, &o));
+    ASSERT_FALSE(umb_settings_set_float(&s, "pid_kp", -0.5, &o));
+    ASSERT_FALSE(umb_settings_set_float(&s, "pid_kp", 1e300, &o)); /* no double->float overflow */
+    ASSERT_FALSE(umb_settings_set_float(&s, "pid_kp", 5000.5, &o));
+    ASSERT_TRUE(umb_settings_set_float(&s, "wheel_diam_m", 0.01, &o)); /* inclusive minimum */
+    ASSERT_TRUE(umb_settings_set_int(&s, "reflex.stall.auto", 3, &o));
+    ASSERT_EQ(o.reflex_auto[UMB_REFLEX_STALL], 3);
+    ASSERT_FALSE(umb_settings_set_int(&s, "reflex.stall.auto", 4, &o));
+    ASSERT_FALSE(umb_settings_get_int(&s, "pid_kp", &i));
+    ASSERT_FALSE(umb_settings_get_float(&s, "cmd_timeout_ms", &d));
+    /* Cross-field rules reject like the console: neutral outside min/max. */
+    umb_settings_t narrow = s; narrow.min_point = 80; narrow.max_point = 100; narrow.neutral_point = 90;
+    ASSERT_FALSE(umb_settings_set_int(&narrow, "neutral_point", 120, &o));
+    ASSERT_TRUE(umb_settings_set_int(&narrow, "neutral_point", 95, &o));
+    /* in/out may alias; rejection leaves out untouched. */
+    umb_settings_t a = s; a.cmd_timeout_ms = 321;
+    ASSERT_FALSE(umb_settings_set_int(&a, "cmd_timeout_ms", 5, &a)); ASSERT_EQ(a.cmd_timeout_ms, 321);
+}
+
 int main(void) {
     RUN_TEST(test_padding_garbage_does_not_matter);
     RUN_TEST(test_crc32_known_vector);
@@ -353,5 +402,6 @@ int main(void) {
     RUN_TEST(test_pick_slot_erased_flash_gives_defaults);
     RUN_TEST(test_pick_slot_seq_wrap);
     RUN_TEST(test_pick_slot_equal_seq_prefers_slot0);
+    RUN_TEST(test_typed_numeric_access_ranges_and_types);
     TEST_SUMMARY();
 }

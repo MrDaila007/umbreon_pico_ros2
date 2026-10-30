@@ -343,3 +343,72 @@ bool umb_settings_get_kv(const umb_settings_t *s, const char *key, char *buf, si
     }
     return n >= 0 && (size_t)n < cap;
 }
+
+/* ---- typed numeric access (no strings, no locale, no narrowing) ----------- */
+
+static const field_t *numeric_field(const char *key)
+{
+    const field_t *f = key ? find_field(key) : NULL;
+    return f && f->kind != K_STR ? f : NULL;
+}
+
+bool umb_settings_numeric_info(const char *key, umb_settings_numeric_info_t *out)
+{
+    const field_t *f = numeric_field(key);
+    if (!f || !out) return false;
+    out->is_float = is_float(f->kind);
+    out->min = f->min;
+    out->max = f->kind == K_IP ? 4294967295.0 : f->max;
+    return true;
+}
+
+bool umb_settings_get_int(const umb_settings_t *s, const char *key, int64_t *out)
+{
+    const field_t *f = numeric_field(key);
+    if (!f || !out || is_float(f->kind)) return false;
+    *out = read_int((const uint8_t *)s, f);
+    return true;
+}
+
+bool umb_settings_get_float(const umb_settings_t *s, const char *key, double *out)
+{
+    const field_t *f = numeric_field(key);
+    if (!f || !out || !is_float(f->kind)) return false;
+    float v;
+    memcpy(&v, (const uint8_t *)s + f->off, sizeof v);
+    *out = (double)v;
+    return true;
+}
+
+/* Cross-field rules: sanitize must be a no-op, otherwise reject (as set_kv). */
+static bool commit_candidate(const umb_settings_t *t, umb_settings_t *out)
+{
+    umb_settings_t c = umb_settings_sanitize(*t);
+    if (!umb_settings_equal(&c, t)) return false;
+    *out = *t;
+    return true;
+}
+
+bool umb_settings_set_int(const umb_settings_t *in, const char *key, int64_t value, umb_settings_t *out)
+{
+    const field_t *f = numeric_field(key);
+    if (!f || !in || !out || is_float(f->kind)) return false;
+    umb_settings_numeric_info_t info;
+    if (!umb_settings_numeric_info(key, &info)) return false;
+    if ((double)value < info.min || (double)value > info.max) return false;
+    umb_settings_t t = *in;
+    write_int((uint8_t *)&t, f, (long long)value);
+    return commit_candidate(&t, out);
+}
+
+bool umb_settings_set_float(const umb_settings_t *in, const char *key, double value, umb_settings_t *out)
+{
+    const field_t *f = numeric_field(key);
+    if (!f || !in || !out || !is_float(f->kind) || !isfinite(value)) return false;
+    if (value < f->min || value > f->max) return false;
+    float fv = (float)value;
+    if ((double)fv < f->min) fv = (float)f->min; /* float rounding of an inclusive bound */
+    umb_settings_t t = *in;
+    memcpy((uint8_t *)&t + f->off, &fv, sizeof fv);
+    return commit_candidate(&t, out);
+}

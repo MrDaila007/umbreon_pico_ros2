@@ -89,9 +89,9 @@ Implemented in firmware, not yet validated against a live agent (Task 13).
 - Graph (`firmware/app/ros_entities.c`): node `pico` in `/umbreon`; the 11
   telemetry publishers, 3 command subscriptions (best-effort, volatile, keep-last
   1) and `/umbreon/arm` (reliable service), one 10 ms scheduler timer and an
-  executor sized for 12 handles. `/umbreon/save_settings` (Task 11) and the
-  parameter server (Task 10) are reserved hooks: their handles are counted, the
-  entities are not created yet. `/umbreon/reflex` exists but is filled by Task 12.
+  executor sized for 12 handles. `/umbreon/save_settings` (Task 11) is a reserved
+  hook: its handle is counted, the entity is not created yet. The parameter
+  server (Task 10, below) is created after `/umbreon/arm`. `/umbreon/reflex` exists but is filled by Task 12.
 - Creation is one entity per network-task iteration with a 200 ms reliable
   creation timeout (350 ms for the node/participant); the session open is
   preceded by a fresh 50 ms XRCE ping and bounded by the library (3 x 50 ms). No
@@ -138,3 +138,165 @@ Measured with `make wire` on the production storage at its bounds:
 The generated size function can exceed the written bytes by up to 3 bytes of
 trailing alignment padding (strings ending off a 4-byte boundary inside a
 sequence); rmw reserves the larger value, so the wire test checks that bound.
+
+## Parameter server (Task 10)
+
+Implemented in firmware and host tests; not yet validated against a live agent
+or `ros2 param` (Task 13). Node `/umbreon/pico`, rclc **low-memory** mode,
+`allow_undeclared_parameters=false`, `max_params = 55` (the counted descriptor
+table in `firmware/app/ros_params.c`), event publisher `/parameter_events` on.
+The server creates its 6 services (get, get_types, set, set_atomically, list,
+describe) and the event publisher in one session-creation step (7 reliable
+entities, each bounded to 50 ms, 350 ms worst case) after `/umbreon/arm`; it
+takes `RCLC_EXECUTOR_PARAMETER_SERVER_HANDLES` (6, asserted at build time)
+executor handles. Service replies and event publishes confirm within 20 ms. The
+declare/populate step runs with change events suppressed.
+
+Values are the shared firmware settings (the same ones the console edits); there
+is no second copy to save. Edits are RAM only: persist with the console `save`
+(the ROS save service is Task 11). Credentials (`wifi_ssid`, `wifi_pass`,
+`ap_pass`) and the `calibrated` flag are not parameters; no string parameters.
+
+### Parameter table (55)
+
+Types are ROS `int` (int64), `double` (stored as the float setting), `bool`. The
+range is enforced by the same validators as the console `set`, plus the
+cross-field rules (`neutral_point` inside `min_point..max_point`, `cap_near_mm` <
+`cap_far_mm`, `max_point` >= `min_point`). Reflex values are `0 off, 1 warn,
+2 pico, 3 ros`; `arming_mode` is `0 none, 1 encoder, 2 ros, 3 both`;
+`wifi_mode` is `0 auto, 1 sta, 2 ap`. "reconnect" parameters change the network
+identity: the reply is sent first, then WiFi/agent/session are torn down and
+recreated with the new value.
+
+| Name | Type | Range | After set |
+|---|---|---|---|
+| `arming_mode` | int | 0..3 |  |
+| `cmd_timeout_ms` | int | 100..1000 |  |
+| `max_speed_ms` | double | 0..5 |  |
+| `max_reverse_speed_ms` | double | 0..5 |  |
+| `max_throttle` | double | 0..1 |  |
+| `max_throttle_rev` | double | 0..1 |  |
+| `min_speed` | int | 1500..2000 |  |
+| `max_speed` | int | 1500..2000 |  |
+| `min_bspeed` | int | 1000..1500 |  |
+| `min_point` | int | 0..180 |  |
+| `max_point` | int | 0..180 |  |
+| `steer_trim` | int | -90..90 |  |
+| `servo_reverse` | bool | false / true |  |
+| `pid_kp` | double | 0..5000 |  |
+| `pid_ki` | double | 0..10000 |  |
+| `pid_kd` | double | 0..2000 |  |
+| `spd_slew` | double | 0..20 |  |
+| `kick_pct` | double | 0..100 |  |
+| `kick_ms` | int | 0..2000 |  |
+| `corner_kick_us` | int | 0..200 |  |
+| `reverse_brake_cmd` | int | -1000..0 |  |
+| `reverse_brake_ms` | int | 0..5000 |  |
+| `encoder_holes` | int | 1..2000 |  |
+| `wheel_diam_m` | double | 0.01..1.0 |  |
+| `tach_glitch_filter_us` | int | 1..500 |  |
+| `bat_enabled` | bool | false / true |  |
+| `bat_multiplier` | double | 0.1..20 |  |
+| `bat_low` | double | 0.1..20 |  |
+| `imu_rotate` | bool | false / true |  |
+| `wifi_mode` | int | 0..2 | reconnect |
+| `sta_timeout_s` | int | 5..120 | reconnect |
+| `agent_ip` | int | 0..4294967295 | reconnect |
+| `agent_port` | int | 1..65535 | reconnect |
+| `ros_domain_id` | int | 0..232 | reconnect |
+| `reflex.battery.manual` | int | 0..3 |  |
+| `reflex.battery.auto` | int | 0..3 |  |
+| `reflex.collision.manual` | int | 0..3 |  |
+| `reflex.collision.auto` | int | 0..3 |  |
+| `reflex.speed_cap.manual` | int | 0..3 |  |
+| `reflex.speed_cap.auto` | int | 0..3 |  |
+| `reflex.stall.manual` | int | 0..3 |  |
+| `reflex.stall.auto` | int | 0..3 |  |
+| `reflex.impact.manual` | int | 0..3 |  |
+| `reflex.impact.auto` | int | 0..3 |  |
+| `reflex.sensor_fault.manual` | int | 0..3 |  |
+| `reflex.sensor_fault.auto` | int | 0..3 |  |
+| `ttc_ms` | int | 100..3000 |  |
+| `min_front_mm` | int | 30..1000 |  |
+| `cap_far_mm` | int | 100..2000 |  |
+| `cap_near_mm` | int | 50..1500 |  |
+| `cap_min_ms` | double | 0..5 |  |
+| `collision_sensor_mask` | int | 1..63 |  |
+| `stall_min_us` | int | 10..500 |  |
+| `stall_ms` | int | 200..5000 |  |
+| `impact_g` | double | 1.5..16 |  |
+
+The unit test
+`test_table_is_complete_unique_and_consistent_with_core` pins the total (55) and
+that every row exists in the core settings table with the same type class and
+range.
+
+`steer_trim` is an **alias**: an integer degree offset from 90 that maps to the
+canonical `neutral_point` (`neutral_point = 90 + steer_trim`, so `-90..90`).
+`neutral_point` itself is not a ROS parameter and the struct/flash layout is
+unchanged. A console `set neutral_point 83` shows up as `steer_trim = -7` on the
+next reconciliation.
+
+`agent_ip` is an int64 constrained to `0..4294967295`, the host-order value
+`a<<24 | b<<16 | c<<8 | d`; `0` means discover. The console keeps dotted IPv4:
+
+```
+# console                          # ROS 2
+set agent_ip 10.202.20.150         ros2 param set /umbreon/pico agent_ip 181015702
+set agent_ip discover              ros2 param set /umbreon/pico agent_ip 0
+```
+
+(`10.202.20.150 = 10*2^24 + 202*2^16 + 20*2^8 + 150 = 181015702`.)
+
+### Refusals and arming gates
+
+A set is committed only when it is valid and the car is disarmed with no arm
+request queued and no maintenance reservation (save in progress); otherwise the
+reply is `successful=false` and nothing changes: wrong type (`ros2 param set
+... pid_kp 3` sends an int; use `3.0`), NaN/Inf, out of range or int64 overflow,
+cross-field violation, unknown name (no undeclared parameters), deletion
+(`ros2 param delete` sends NOT_SET), and any edit while armed, arming, or saving.
+This includes `arming_mode`, which on the console is allowed while armed; over
+ROS it is not. Changing `arming_mode` clears both arming keys and the neutral
+latch through the control task as before. Each commit is one atomic
+compare-by-revision write; if a console edit lands in between, the ROS edit is
+retried (3 attempts) on the fresh settings, so a newer console value is never
+overwritten, and after three conflicts the set is refused.
+
+### Reconciliation
+
+The rclc modification callback only validates and commits settings; it never
+calls an rclc setter (the library disables them inside callbacks). After each
+executor spin the owner task compares the settings revision with its cache and
+writes back differing values in bounded chunks (8 descriptors examined, at most 3
+server writes per iteration; each write may publish an event). A revision change
+mid-pass restarts the pass from a fresh snapshot, so a stale copy is never
+written over a newer value. Console, UI and `defaults` changes therefore appear
+in `ros2 param get` within a few owner iterations. These internal writes call the
+modification callback too; a flag marks them so they are accepted even while
+armed, while an external write is still refused. A new session starts with a
+fresh server populated from the current settings.
+
+### Low-memory and CLI behavior
+
+Low-memory mode means one parameter per request; atomic batches are not
+promised. The pinned header defines `RCLC_PARAMETER_UNSUPORTED_ON_LOW_MEM`; the
+rclc implementation source is not part of this repository, so the exact reply
+text could not be read from the pinned build and the following is **unverified
+until Task 13 runs it against the real server**:
+
+| Command | Expected |
+|---|---|
+| `ros2 param set /umbreon/pico <name> <v>` | one `SetParameters` entry; accepted or `successful=false` with the reason |
+| `ros2 param get /umbreon/pico <name>` | one name per request: works |
+| `ros2 param list /umbreon/pico` | `ListParameters`; low-memory listing limits unverified |
+| `ros2 param describe /umbreon/pico <name>` | one name; no ranges are advertised (enforced on set instead) |
+| `ros2 param delete /umbreon/pico <name>` | refused (`Rejected by server`) |
+| `ros2 param load` / `dump` / multi-name get | multiple parameters per request are a low-memory limitation |
+| `set_parameters_atomically` | not promised; treat any result other than an explicit success as unsupported |
+
+Host tests cannot link rclc; they pin our side of the contract: creation and
+deletion refused, a batch is judged per parameter and is **not** atomic (an
+accepted first entry stays applied when a later one is rejected), and the
+descriptor table. The event publishes after a console edit and the
+heap use of the server are measured in Task 13.

@@ -75,6 +75,18 @@ bool umb_settings_set_kv(const umb_settings_t *in, const char *key, const char *
 /* Print one field; passwords print as "***". False on unknown key or small buffer. */
 bool umb_settings_get_kv(const umb_settings_t *s, const char *key, char *buf, size_t cap);
 
+/* Typed access for programmatic clients (ROS parameters): no string or locale
+ * round trip, no narrowing. Every setter applies the same range and cross-field
+ * rules as umb_settings_set_kv and leaves *out untouched on rejection. Integer
+ * class: integers, bools (0/1), enums, reflex actions, agent_ip (0..2^32-1).
+ * Float class: float fields. Strings have no numeric access. */
+typedef struct { bool is_float; double min, max; } umb_settings_numeric_info_t;
+bool umb_settings_numeric_info(const char *key, umb_settings_numeric_info_t *out);
+bool umb_settings_get_int(const umb_settings_t *s, const char *key, int64_t *out);
+bool umb_settings_get_float(const umb_settings_t *s, const char *key, double *out);
+bool umb_settings_set_int(const umb_settings_t *in, const char *key, int64_t value, umb_settings_t *out);
+bool umb_settings_set_float(const umb_settings_t *in, const char *key, double value, umb_settings_t *out);
+
 #define UMB_SETTINGS_SLOT_SIZE 4096u
 #define UMB_SETTINGS_MAGIC 0x554D4250u   /* "UMBP" */
 #define UMB_SETTINGS_VERSION 1u

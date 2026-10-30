@@ -4,6 +4,7 @@
 #include "test_runner.h"
 #include "net_owner.h"
 #include "shared_state.h"
+#include "ros_params.h"
 #include "hal_dhcp_server.h"
 #include "hal_flash_store.h"
 #include "hal_rand.h"
@@ -442,6 +443,35 @@ TEST(test_session_reopen_waits_while_console_armed) {
     umb_outputs_t idle = {.esc_us = 1500}; shared_publish_outputs(&idle);
     ASSERT_TRUE(run_until_agent(&o, 400));
 }
+/* A ROS parameter edit happens inside the executor spin (rclc callback). The
+ * service response is sent when that callback returns, still inside the same
+ * spin; the session is invalidated only by the next owner iteration. */
+static ros_params_t params;
+static bool param_edit_pending, param_edit_ok;
+static unsigned live_at_edit, link_at_edit;
+static void edit_in_spin(void *user) {
+    (void)user;
+    if (!param_edit_pending) return;
+    param_edit_pending = false;
+    ros_param_value_t v = {.type = ROS_PARAM_INT, .i = 21};
+    param_edit_ok = ros_params_on_modification(&params, "ros_domain_id", true, &v);
+    live_at_edit = ros.live; link_at_edit = agent_link();
+}
+TEST(test_param_domain_edit_commits_then_session_recreated_after_reply) {
+    umb_settings_t s = base(UMB_WIFI_STA_ONLY); net_owner_t o; boot(&o, &s);
+    ASSERT_TRUE(run_until_agent(&o, 200));
+    ros_params_init(&params, ros_params_shared_io());
+    ros.on_spin = edit_in_spin; param_edit_pending = true;
+    step(&o);
+    ASSERT_TRUE(param_edit_ok); ASSERT_EQ(ros.live, (1u << ROS_ENT_COUNT) - 1u); /* untouched during the spin */
+    ASSERT_TRUE(link_at_edit);
+    umb_settings_t now_s; shared_get_settings(&now_s); ASSERT_EQ(now_s.ros_domain_id, 21);
+    ros.on_spin = NULL;
+    step(&o);                                               /* invalidation follows the reply */
+    ASSERT_FALSE(agent_link()); ASSERT_EQ(ros.live, 0);
+    ASSERT_TRUE(run_until_agent(&o, 400));
+    ASSERT_EQ(ros.last_cfg.domain_id, 21);
+}
 int main(void) {
     RUN_TEST(test_offline_radio_never_touches_adapters);
     RUN_TEST(test_sta_join_is_async_and_configured_ip_selected);
@@ -460,5 +490,6 @@ int main(void) {
     RUN_TEST(test_wifi_loss_and_reconfigure_release_session_first);
     RUN_TEST(test_endpoint_edit_reconnects_session_on_new_port);
     RUN_TEST(test_session_reopen_waits_while_console_armed);
+    RUN_TEST(test_param_domain_edit_commits_then_session_recreated_after_reply);
     TEST_SUMMARY();
 }

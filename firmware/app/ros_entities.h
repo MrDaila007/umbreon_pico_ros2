@@ -24,6 +24,12 @@
 #define ROS_SERVICE_REPLY_TIMEOUT_MS 20u
 _Static_assert(ROS_NODE_CREATE_TIMEOUT_MS < 500u - 100u, "node step leaves beat margin");
 #define ROS_OPEN_PING_TIMEOUT_MS 50u /* fresh XRCE ping just before the session open */
+/* The parameter server creates its 6 services and the event publisher inside one
+ * rclc call; each is bounded by this shorter creation timeout so the whole step
+ * stays within the core-0 beat window. */
+#define ROS_PARAM_CREATE_TIMEOUT_MS 50u
+#define ROS_PARAM_CREATE_BUDGET_MS (7u * ROS_PARAM_CREATE_TIMEOUT_MS)
+_Static_assert(ROS_PARAM_CREATE_BUDGET_MS < 500u - 100u, "parameter server step leaves beat margin");
 #define ROS_COMMAND_DEPTH 1u
 #define ROS_SPIN_TIMEOUT_MS 2u      /* executor opportunity per owner iteration */
 
@@ -35,6 +41,7 @@ typedef enum {
     ROS_KIND_PUBLISHER,
     ROS_KIND_SUBSCRIPTION,
     ROS_KIND_SERVICE,
+    ROS_KIND_PARAM_SERVER, /* rclc low-memory server: 6 services + event publisher */
     ROS_KIND_TIMER,
     ROS_KIND_EXECUTOR,
     ROS_KIND_EXECUTOR_HANDLE /* released by the executor fini, no own resource */
@@ -56,12 +63,13 @@ typedef enum {
     ROS_ENT_PUB_DIAGNOSTICS,
     ROS_ENT_SUB_CMD_VEL, ROS_ENT_SUB_CMD_TELEOP, ROS_ENT_SUB_CMD_RAW,
     ROS_ENT_SRV_ARM,
+    ROS_ENT_PARAM_SERVER,
     /* Hook: /umbreon/save_settings (std_srvs/Trigger) is added by Task 11 here;
      * its executor handle is already reserved in ROS_EXECUTOR_HANDLES. */
     ROS_ENT_TIMER,
     ROS_ENT_EXECUTOR,
     ROS_ENT_EXEC_CMD_VEL, ROS_ENT_EXEC_CMD_TELEOP, ROS_ENT_EXEC_CMD_RAW,
-    ROS_ENT_EXEC_ARM, ROS_ENT_EXEC_TIMER,
+    ROS_ENT_EXEC_ARM, ROS_ENT_EXEC_PARAMS, ROS_ENT_EXEC_TIMER,
     ROS_ENT_COUNT
 } ros_entity_id_t;
 _Static_assert(ROS_ENT_COUNT <= 32, "creation bitmap is 32 bits");

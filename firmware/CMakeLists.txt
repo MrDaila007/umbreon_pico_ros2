@@ -90,6 +90,8 @@ set(FW_SRCS
     app/ros_entities.c
     app/ros_entities_rcl.c
     app/ros_messages.c
+    app/ros_params.c
+    app/ros_params_rcl.c
     app/ros_session.c
     app/shared_state.c
     app/control_task.c

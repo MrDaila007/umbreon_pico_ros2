@@ -132,6 +132,7 @@ target_sources(test_net_owner PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../net/fakes/fake_ros_backend.c
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/ros_session.c
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/ros_entities.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/ros_params.c
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/net_owner.c
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/net_wifi.c
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/net_endpoint.c
@@ -169,3 +170,12 @@ target_include_directories(test_ros_messages PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
   ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal
   ${CMAKE_CURRENT_SOURCE_DIR}/../../micro_ros/libmicroros/include)
+
+# ROS parameter model: real shared settings (gates, revisions) and a fake server sink.
+target_sources(test_ros_params PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/ros_params.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app/shared_state.c)
+target_include_directories(test_ros_params PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/task_stubs
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/app
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware/hal)
